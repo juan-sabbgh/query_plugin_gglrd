@@ -62,6 +62,7 @@ async function executeQuery(sql) {
 async function convertQuestionToSQL(naturalLanguageQuestion) {
     try {
         // Create prompt for the AI to convert natural language to SQL
+        const prompt = `Convert this natural language question to a valid MySQL SELECT query: "${naturalLanguageQuestion}". Return ONLY the SQL query without any explanations, comments, or additional text. Do not implement any "_" to blank spaces, and instead add backticks to the column of interest with the blank spaces (example: 'invoice issue date' should become \`invoice issue date\`). If you cannot convert it to a valid SQL query, return "ERROR".`;
 
         const requestData = {
             username: AS_ACCOUNT,
