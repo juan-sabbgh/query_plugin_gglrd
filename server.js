@@ -35,7 +35,6 @@ const dbConfig = {
 // Crea un pool de conexiones para manejar las consultas de forma eficiente
 const pool = mysql.createPool(dbConfig);
 
-
 async function executeQuery(sql) {
     let connection;
     try {
@@ -60,94 +59,149 @@ async function executeQuery(sql) {
     }
 }
 
-
-async function getChatSummary(question, db_result) {
+async function convertQuestionToSQL(naturalLanguageQuestion) {
     try {
+        // Create prompt for the AI to convert natural language to SQL
+        const prompt = `Convert this natural language question to a valid MySQL SELECT query: "${naturalLanguageQuestion}". Return ONLY the SQL query without any explanations, comments, or additional text. Do not implement any "_" to blank spaces, and instead add backticks to the column of interest with the blank spaces (example: 'invoice issue date' should become \`invoice issue date\`). If you cannot convert it to a valid SQL query, return "ERROR".`;
 
-        // Crea el objeto con los datos que quieres enviar en el cuerpo (body)
         const requestData = {
             username: AS_ACCOUNT,
-            question: question
+            question: prompt
         };
 
         const response = await fetch(url, {
-            // Método HTTP, equivalente a -X POST
             method: 'POST',
-
-            // Cabeceras, equivalente a las opciones -H
             headers: {
                 'Content-Type': 'application/json',
                 'cybertron-robot-key': AGENT_KEY,
                 'cybertron-robot-token': AGENT_TOKEN
             },
-
-            // Cuerpo de la solicitud, equivalente a la opción -d
-            // Se convierte el objeto de JS a una cadena de texto en formato JSON
             body: JSON.stringify(requestData)
         });
 
-        // Verifica si la respuesta fue exitosa (código de estado 200-299)
         if (!response.ok) {
             throw new Error(`Error en la solicitud: ${response.status} ${response.statusText}`);
         }
 
-        // Convierte la respuesta a JSON
         const data = await response.json();
+        const sqlQuery = data.data.answer.trim();
 
-        return data.data.answer;
+        // Basic validation of the returned SQL
+        if (sqlQuery === 'ERROR' || !sqlQuery.toUpperCase().startsWith('SELECT')) {
+            throw new Error('AI could not generate a valid SELECT query');
+        }
 
-        // Muestra la respuesta en la consola
-        console.log('Respuesta exitosa:', data);
+        return sqlQuery;
 
     } catch (error) {
-        // Captura y muestra cualquier error que ocurra (de red, etc.)
-        console.error('Ocurrió un error:', error);
+        console.error('Error converting question to SQL:', error);
+        throw new Error(`Failed to convert question to SQL: ${error.message}`);
     }
 }
 
+async function getChatSummary(question, db_result) {
+    try {
+        // Create a more informative prompt including the database results
+        const prompt = `Original question: "${question}"
+        Database results: ${JSON.stringify(db_result)}
+        
+        Please provide a natural language summary and interpretation of these results.`;
 
+        const requestData = {
+            username: AS_ACCOUNT,
+            question: prompt
+        };
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'cybertron-robot-key': AGENT_KEY,
+                'cybertron-robot-token': AGENT_TOKEN
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error en la solicitud: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.data.answer;
+
+    } catch (error) {
+        console.error('Error getting chat summary:', error);
+        throw error;
+    }
+}
 
 app.use(express.json());
 
 app.post('/api/get_recommendation', async (req, res) => {
-    //get info from the json sent in the request
-    const {
-        query,
-        graph
-    } = req.body;
+    try {
+        // Changed from 'query' to 'question' since we're now expecting natural language
+        const { question, graph } = req.body;
 
-    //make query
-    const results_query = await executeQuery(query);
-    //send result for agent to interpret them
-    const chat_summary = await getChatSummary(query, results_query);
+        // Input validation
+        if (!question || typeof question !== 'string' || question.trim().length === 0) {
+            return res.status(400).json({
+                error: 'Valid question is required',
+                message: 'Please provide a natural language question about your data'
+            });
+        }
 
-    if (chat_summary) {
-        //return
+        console.log('Received question:', question);
+
+        // Step 1: Convert natural language question to SQL
+        const sqlQuery = await convertQuestionToSQL(question);
+        console.log('Generated SQL query:', sqlQuery);
+
+        // Step 2: Execute the SQL query
+        const results = await executeQuery(sqlQuery);
+        console.log('Query results:', results);
+
+        // Step 3: Get AI interpretation of the results
+        const chat_summary = await getChatSummary(question, results);
+
+        // Step 4: Return the response
         res.json({
             raw: {
                 success: true,
-                query_processed: query,
-                result: "The query was processed succesfully"
+                original_question: question,
+                generated_sql: sqlQuery,
+                result_count: results.length,
+                result: "The question was processed successfully"
             },
             markdown: "...",
             type: "markdown",
-            desc: `${chat_summary}`
+            desc: chat_summary
         });
-    }
-    else{
-        res.json({
-            raw: {
-                success: true,
-                query_processed: query,
-                result: "The query was processed succesfully"
-            },
-            markdown: "...",
-            type: "markdown",
-            desc: `Your request wasnt processed correctly, try again`
-        });
-    }
 
-})
+    } catch (error) {
+        console.error('Error in /api/get_recommendation:', error);
+        
+        // Provide helpful error messages based on the type of error
+        if (error.message.includes('convert question to SQL')) {
+            res.status(400).json({
+                error: 'Could not understand question',
+                message: 'Please rephrase your question or ask about something else',
+                details: error.message
+            });
+        } else if (error.message.includes('SQL syntax')) {
+            res.status(400).json({
+                error: 'Database error',
+                message: 'There was an issue with the generated query',
+                details: error.message
+            });
+        } else {
+            res.status(500).json({
+                error: 'Internal server error',
+                message: 'Something went wrong while processing your request',
+                details: error.message
+            });
+        }
+    }
+});
 
 //initialize server with app.listen method, if there are no errors when initializing
 //the server then it will print succesfully in the console, if not then print error
@@ -156,5 +210,4 @@ app.listen(PORT, (error) => {
         console.log(`Server running on http://localhost:${PORT}`);
     else
         console.log("Error occurred, server can't start", error);
-}
-);
+});
