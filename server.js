@@ -41,7 +41,7 @@ async function executeQuery(sql) {
     try {
         // Obtiene una conexión del pool
         connection = await pool.getConnection();
-        
+
         // Ejecuta la consulta con los parámetros
         // El driver se encarga de escapar los valores para prevenir inyecciones SQL
         const [results] = await connection.execute(sql, []);
@@ -94,6 +94,8 @@ async function getChatSummary(question, db_result) {
         // Convierte la respuesta a JSON
         const data = await response.json();
 
+        return data.data.answer;
+
         // Muestra la respuesta en la consola
         console.log('Respuesta exitosa:', data);
 
@@ -119,17 +121,32 @@ app.post('/api/get_recommendation', async (req, res) => {
     //send result for agent to interpret them
     const chat_summary = await getChatSummary(query, results_query);
 
-    //return
-    res.json({
-        raw: {
-            success: true,
-            query_processed: query,
-            result: "The query was processed succesfully"
-        },
-        markdown: "...",
-        type: "markdown",
-        desc: `Result`
-    });
+    if (chat_summary) {
+        //return
+        res.json({
+            raw: {
+                success: true,
+                query_processed: query,
+                result: "The query was processed succesfully"
+            },
+            markdown: "...",
+            type: "markdown",
+            desc: `${chat_summary}`
+        });
+    }
+    else{
+        res.json({
+            raw: {
+                success: true,
+                query_processed: query,
+                result: "The query was processed succesfully"
+            },
+            markdown: "...",
+            type: "markdown",
+            desc: `Your request wasnt processed correctly, try again`
+        });
+    }
+
 })
 
 //initialize server with app.listen method, if there are no errors when initializing
