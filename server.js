@@ -59,6 +59,23 @@ async function executeQuery(sql) {
     }
 }
 
+function generateMarkdownTable(data) {
+  if (!data || data.length === 0) {
+    return "No hay datos para mostrar.";
+  }
+
+  const headers = Object.keys(data[0]);
+  const headerRow = `| ${headers.join(' | ')} |`;
+  const separatorRow = `|${headers.map(() => ':---').join('|')}|`;
+
+  const bodyRows = data.map(row => {
+    const values = headers.map(header => row[header]);
+    return `| ${values.join(' | ')} |`;
+  }).join('\n');
+
+  return `${headerRow}\n${separatorRow}\n${bodyRows}`;
+}
+
 async function convertQuestionToSQL(naturalLanguageQuestion) {
     try {
         // Create prompt for the AI to convert natural language to SQL
@@ -165,6 +182,40 @@ app.post('/api/get_recommendation', async (req, res) => {
         // Step 3: Get AI interpretation of the results
         const chat_summary = await getChatSummary(query, results);
 
+        //Check wether a graph is necessary
+        // Verifica si se necesita un gráfico
+        if (graph === "bar") {
+            // Maneja el caso de que no haya resultados
+            if (!results || results.length === 0) {
+                return res.json({
+                    data: [], raw: [], markdown: "No data.",
+                    field_headers: [], chart_type: "bar", type: "chart",
+                    dimension: null, desc: "No data found for the query."
+                });
+            }
+
+            // 1. Extrae los encabezados de los resultados
+            const field_headers = Object.keys(results[0]);
+            
+            // 2. La "dimensión" suele ser el primer encabezado (ej. la fecha)
+            const dimension = field_headers[0];
+            
+            // 3. Genera la tabla markdown usando la función auxiliar
+            const markdownTable = generateMarkdownTable(results);
+
+            // 4. Construye y envía la respuesta en el formato deseado
+            return res.json({
+                data: results,
+                raw: results,
+                markdown: markdownTable,
+                field_headers: field_headers,
+                chart_type: "bar",
+                type: "chart",
+                dimension: dimension,
+                desc: chat_summary
+            });
+        }
+
         // Step 4: Return the response
         res.json({
             raw: {
@@ -180,7 +231,7 @@ app.post('/api/get_recommendation', async (req, res) => {
 
     } catch (error) {
         console.error('Error in /api/get_recommendation:', error);
-        
+
         // Provide helpful error messages based on the type of error
         if (error.message.includes('convert query to SQL')) {
             res.status(400).json({
