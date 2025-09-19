@@ -99,10 +99,10 @@ async function convertQuestionToSQL(naturalLanguageQuestion) {
     }
 }
 
-async function getChatSummary(question, db_result) {
+async function getChatSummary(query, db_result) {
     try {
         // Create a more informative prompt including the database results
-        const prompt = `Original question: "${question}"
+        const prompt = `Original query: "${query}"
         Database results: ${JSON.stringify(db_result)}
         
         Please provide a natural language summary and interpretation of these results.`;
@@ -140,37 +140,36 @@ app.use(express.json());
 app.post('/api/get_recommendation', async (req, res) => {
     try {
         // Changed from 'query' to 'question' since we're now expecting natural language
-        const { question, graph } = req.body;
+        const { query, graph } = req.body;
 
         // Input validation
-        if (!question || typeof question !== 'string' || question.trim().length === 0) {
+        if (!query || typeof query !== 'string' || query.trim().length === 0) {
             return res.status(400).json({
-                error: 'Valid question is required',
-                message: 'Please provide a natural language question about your data'
+                error: 'Valid query is required',
+                message: 'Please provide a natural language query about your data'
             });
         }
 
-        console.log('Received question:', question);
+        console.log('Received query:', query);
 
         // Step 1: Convert natural language question to SQL
-        const sqlQuery = await convertQuestionToSQL(question);
-        console.log('Generated SQL query:', sqlQuery);
+        //const sqlQuery = await convertQuestionToSQL(question);
+        //console.log('Generated SQL query:', sqlQuery);
 
         // Step 2: Execute the SQL query
-        const results = await executeQuery(sqlQuery);
+        const results = await executeQuery(query);
         console.log('Query results:', results);
 
         // Step 3: Get AI interpretation of the results
-        const chat_summary = await getChatSummary(question, results);
+        const chat_summary = await getChatSummary(query, results);
 
         // Step 4: Return the response
         res.json({
             raw: {
                 success: true,
-                original_question: question,
-                generated_sql: sqlQuery,
+                original_query: query,
                 result_count: results.length,
-                result: "The question was processed successfully"
+                result: "The query was processed successfully"
             },
             markdown: "...",
             type: "markdown",
@@ -181,10 +180,10 @@ app.post('/api/get_recommendation', async (req, res) => {
         console.error('Error in /api/get_recommendation:', error);
         
         // Provide helpful error messages based on the type of error
-        if (error.message.includes('convert question to SQL')) {
+        if (error.message.includes('convert query to SQL')) {
             res.status(400).json({
-                error: 'Could not understand question',
-                message: 'Please rephrase your question or ask about something else',
+                error: 'Could not understand query',
+                message: 'Please rephrase your query or ask about something else',
                 details: error.message
             });
         } else if (error.message.includes('SQL syntax')) {
