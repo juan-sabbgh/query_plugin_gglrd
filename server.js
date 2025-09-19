@@ -142,6 +142,8 @@ app.post('/api/get_recommendation', async (req, res) => {
         // Changed from 'query' to 'question' since we're now expecting natural language
         const { query, graph } = req.body;
 
+        console.log(`Query: ${query} \nGraph: ${graph}`)
+
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
             return res.status(400).json({
