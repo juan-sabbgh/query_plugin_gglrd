@@ -60,20 +60,20 @@ async function executeQuery(sql) {
 }
 
 function generateMarkdownTable(data) {
-  if (!data || data.length === 0) {
-    return "No hay datos para mostrar.";
-  }
+    if (!data || data.length === 0) {
+        return "No hay datos para mostrar.";
+    }
 
-  const headers = Object.keys(data[0]);
-  const headerRow = `| ${headers.join(' | ')} |`;
-  const separatorRow = `|${headers.map(() => ':---').join('|')}|`;
+    const headers = Object.keys(data[0]);
+    const headerRow = `| ${headers.join(' | ')} |`;
+    const separatorRow = `|${headers.map(() => ':---').join('|')}|`;
 
-  const bodyRows = data.map(row => {
-    const values = headers.map(header => row[header]);
-    return `| ${values.join(' | ')} |`;
-  }).join('\n');
+    const bodyRows = data.map(row => {
+        const values = headers.map(header => row[header]);
+        return `| ${values.join(' | ')} |`;
+    }).join('\n');
 
-  return `${headerRow}\n${separatorRow}\n${bodyRows}`;
+    return `${headerRow}\n${separatorRow}\n${bodyRows}`;
 }
 
 async function convertQuestionToSQL(naturalLanguageQuestion) {
@@ -196,10 +196,10 @@ app.post('/api/get_recommendation', async (req, res) => {
 
             // 1. Extrae los encabezados de los resultados
             const field_headers = Object.keys(results[0]);
-            
+
             // 2. La "dimensión" suele ser el primer encabezado (ej. la fecha)
             const dimension = field_headers[0];
-            
+
             // 3. Genera la tabla markdown usando la función auxiliar
             const markdownTable = generateMarkdownTable(results);
 
@@ -239,17 +239,28 @@ app.post('/api/get_recommendation', async (req, res) => {
             });
         }
         else if (graph === "pie") {
+            // Manejo de caso sin resultados
             if (!results || results.length === 0) {
                 return res.json({
                     data: [], raw: [], markdown: "No data.",
                     field_headers: [], chart_type: "pie", type: "chart",
-                    dimension: null, desc: "No data found for the query."
+                    dimension: null, metrics: null, // Añadido metrics: null para consistencia
+                    desc: "No data found for the query."
                 });
             }
+
             const field_headers = Object.keys(results[0]);
+
+            // Para un Pie Chart, la dimensión son las categorías (primera columna)
             const dimension = field_headers[0];
+
+            // La métrica es el valor numérico (segunda columna) que define el tamaño de las rebanadas.
+            // Nos aseguramos de que haya al menos 2 columnas para evitar errores.
+            const metrics = field_headers.length > 1 ? field_headers[1] : null;
+
             const markdownTable = generateMarkdownTable(results);
 
+            // Se construye la respuesta incluyendo el nuevo campo "metrics"
             return res.json({
                 data: results,
                 raw: results,
@@ -258,6 +269,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 chart_type: "pie",
                 type: "chart",
                 dimension: dimension,
+                metrics: metrics, // <-- CAMBIO CLAVE: Se añade el campo "metrics"
                 desc: chat_summary
             });
         }
