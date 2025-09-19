@@ -215,6 +215,74 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: chat_summary
             });
         }
+        else if (graph === "line") {
+            if (!results || results.length === 0) {
+                return res.json({
+                    data: [], raw: [], markdown: "No data.",
+                    field_headers: [], chart_type: "line", type: "chart",
+                    dimension: null, desc: "No data found for the query."
+                });
+            }
+            const field_headers = Object.keys(results[0]);
+            const dimension = field_headers[0];
+            const markdownTable = generateMarkdownTable(results);
+
+            return res.json({
+                data: results,
+                raw: results,
+                markdown: markdownTable,
+                field_headers: field_headers,
+                chart_type: "line",
+                type: "chart",
+                dimension: dimension,
+                desc: chat_summary
+            });
+        }
+        else if (graph === "pie") {
+            if (!results || results.length === 0) {
+                return res.json({
+                    data: [], raw: [], markdown: "No data.",
+                    field_headers: [], chart_type: "pie", type: "chart",
+                    dimension: null, desc: "No data found for the query."
+                });
+            }
+            const field_headers = Object.keys(results[0]);
+            const dimension = field_headers[0];
+            const markdownTable = generateMarkdownTable(results);
+
+            return res.json({
+                data: results,
+                raw: results,
+                markdown: markdownTable,
+                field_headers: field_headers,
+                chart_type: "pie",
+                type: "chart",
+                dimension: dimension,
+                desc: chat_summary
+            });
+        }
+        else if (graph === "scatter") {
+            if (!results || results.length === 0) {
+                return res.json({
+                    data: [], raw: [], markdown: "No data.",
+                    field_headers: [], chart_type: "scatter", type: "chart",
+                    dimension: null, desc: "No data found for the query."
+                });
+            }
+            const field_headers = Object.keys(results[0]);
+            const markdownTable = generateMarkdownTable(results);
+
+            return res.json({
+                data: results,
+                raw: results,
+                markdown: markdownTable,
+                field_headers: field_headers,
+                chart_type: "scatter",
+                type: "chart",
+                dimension: null,
+                desc: chat_summary
+            });
+        }
 
         // Step 4: Return the response
         res.json({
