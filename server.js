@@ -2,6 +2,9 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 
+// Importa la clase Pool desde la librería 'pg'
+const { Pool } = require('pg');
+
 require('dotenv').config();
 
 //create an instance of express
@@ -29,23 +32,33 @@ const dbConfig = {
     port: DB_PORT,
     user: DB_USER,
     password: DB_PASSWORD,
-    database: DB_NAME
+    database: DB_NAME,
+    ssl: {
+      rejectUnauthorized: false // Requerido para conectar a Supabase
+    }
 };
 
+// Crea un pool de conexiones usando la configuración
+const pool = new Pool(dbConfig);
+
 // Crea un pool de conexiones para manejar las consultas de forma eficiente
-const pool = mysql.createPool(dbConfig);
+//const pool = mysql.createPool(dbConfig);
 
 async function executeQuery(sql) {
     let connection;
     try {
         // Obtiene una conexión del pool
-        connection = await pool.getConnection();
+        //connection = await pool.getConnection();
 
         // Ejecuta la consulta con los parámetros
         // El driver se encarga de escapar los valores para prevenir inyecciones SQL
-        const [results] = await connection.execute(sql, []);
-        console.log(results)
-        return results;
+        //const [results] = await connection.execute(sql, []);
+        //console.log(results)
+        //return results;
+        const results = await pool.query(sql, []);
+        console.log(results.rows);
+        return results.rows;
+        
 
     } catch (error) {
         // Si hay un error, lo muestra en consola y lo lanza para que sea manejado
