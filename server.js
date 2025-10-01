@@ -62,7 +62,7 @@ async function executeQuery(sql) {
 
     } catch (error) {
         // Si hay un error, lo muestra en consola y lo lanza para que sea manejado
-        console.error("Error al ejecutar la consulta:", error);
+        console.error("Error en la consulta SQL syntax:", error);
         throw error;
     } finally {
         // Asegura que la conexión se libere y vuelva al pool, sin importar si hubo error o no
@@ -74,7 +74,7 @@ async function executeQuery(sql) {
 
 function generateMarkdownTable(data) {
     if (!data || data.length === 0) {
-        return "No hay datos para mostrar.";
+        return "No data to be shown";
     }
 
     const headers = Object.keys(data[0]);
@@ -332,6 +332,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 raw: {
                     success: false,
                     original_query: query,
+                    error: error,
                     result: "The query was not processed successfully"
                 },
                 markdown: "...",
@@ -343,6 +344,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 raw: {
                     success: false,
                     original_query: query,
+                    error: error,
                     result: "There was an issue with the generated query"
                 },
                 markdown: "...",
@@ -354,6 +356,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 raw: {
                     success: false,
                     original_query: query,
+                    error: error,
                     result: "Something went wrong while processing your request"
                 },
                 markdown: "...",
