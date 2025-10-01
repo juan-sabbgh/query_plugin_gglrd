@@ -34,7 +34,7 @@ const dbConfig = {
     password: DB_PASSWORD,
     database: DB_NAME,
     ssl: {
-      rejectUnauthorized: false // Requerido para conectar a Supabase
+        rejectUnauthorized: false // Requerido para conectar a Supabase
     }
 };
 
@@ -58,7 +58,7 @@ async function executeQuery(sql) {
         const results = await pool.query(sql, []);
         console.log(results.rows);
         return results.rows;
-        
+
 
     } catch (error) {
         // Si hay un error, lo muestra en consola y lo lanza para que sea manejado
@@ -310,6 +310,7 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         // Step 4: Return the response
+        const markdownTable = generateMarkdownTable(results);
         res.json({
             raw: {
                 success: true,
@@ -317,7 +318,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 result_count: results.length,
                 result: "The query was processed successfully"
             },
-            markdown: "...",
+            markdown: markdownTable,
             type: "markdown",
             desc: chat_summary
         });
@@ -328,21 +329,36 @@ app.post('/api/get_recommendation', async (req, res) => {
         // Provide helpful error messages based on the type of error
         if (error.message.includes('convert query to SQL')) {
             res.status(400).json({
-                error: 'Could not understand query',
-                message: 'Please rephrase your query or ask about something else',
-                details: error.message
+                raw: {
+                    success: false,
+                    original_query: query,
+                    result: "The query was not processed successfully"
+                },
+                markdown: "...",
+                type: "markdown",
+                desc: "Please try another question"
             });
         } else if (error.message.includes('SQL syntax')) {
             res.status(400).json({
-                error: 'Database error',
-                message: 'There was an issue with the generated query',
-                details: error.message
+                raw: {
+                    success: false,
+                    original_query: query,
+                    result: "There was an issue with the generated query"
+                },
+                markdown: "...",
+                type: "markdown",
+                desc: "There was an issue with the generated query"
             });
         } else {
             res.status(500).json({
-                error: 'Internal server error',
-                message: 'Something went wrong while processing your request',
-                details: error.message
+                raw: {
+                    success: false,
+                    original_query: query,
+                    result: "Something went wrong while processing your request"
+                },
+                markdown: "...",
+                type: "markdown",
+                desc: "Something went wrong while processing your request"
             });
         }
     }
