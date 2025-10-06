@@ -175,13 +175,36 @@ app.post('/api/get_recommendation', async (req, res) => {
 
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
-            return res.status(400).json({
-                error: 'Valid query is required',
-                message: 'Please provide a natural language query about your data'
+            return res.json({
+                raw: {
+                    success: false,
+                    original_query: query,
+                    error: "Invalid or empty query provided.",
+                    result: "The query was not processed successfully"
+                },
+                markdown: "The query is invalid. Please try another question.",
+                type: "markdown",
+                desc: "Please try another question"
             });
         }
 
         console.log('Received query:', query);
+
+        //Validate that query is a select statement
+        if (!query.trim().toUpperCase().startsWith('SELECT')) {
+            console.log('Validation failed: Non-SELECT query detected.');
+            return res.status(403).json({
+                raw: {
+                    success: false,
+                    original_query: query,
+                    error: "Query type not allowed. Only SELECT statements are permitted.",
+                    result: "The query was not processed successfully"
+                },
+                markdown: "### 🚫 Query Blocked\nYour query was blocked because it is not a `SELECT` statement. Operations like `INSERT`, `UPDATE`, `DROP`, etc., are not allowed.",
+                type: "markdown",
+                desc: "Only SELECT queries are allowed"
+            });
+        }
 
         // Step 1: Convert natural language question to SQL
         //const sqlQuery = await convertQuestionToSQL(question);
@@ -310,7 +333,7 @@ app.post('/api/get_recommendation', async (req, res) => {
 
         // Step 4: Return the response
         const markdownTable = generateMarkdownTable(results);
-        res.json({
+        return res.json({
             raw: {
                 success: true,
                 original_query: query,
@@ -327,7 +350,7 @@ app.post('/api/get_recommendation', async (req, res) => {
 
         // Provide helpful error messages based on the type of error
         if (error.message.includes('convert query to SQL')) {
-            res.status(400).json({
+            return res.json({
                 raw: {
                     success: false,
                     original_query: query,
@@ -339,7 +362,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: "Please try another question"
             });
         } else if (error.message.includes('SQL syntax')) {
-            res.status(400).json({
+            return res.json({
                 raw: {
                     success: false,
                     original_query: query,
@@ -351,7 +374,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: "There was an issue with the generated query"
             });
         } else {
-            res.status(500).json({
+            return res.json({
                 raw: {
                     success: false,
                     original_query: query,
@@ -374,17 +397,36 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
-            return res.status(400).json({
-                error: 'Valid query is required',
-                message: 'Please provide a natural language query about your data'
+            return res.json({
+                raw: {
+                    success: false,
+                    original_query: query,
+                    error: "Invalid or empty query provided.",
+                    result: "The query was not processed successfully"
+                },
+                markdown: "The query is invalid. Please try another question.",
+                type: "markdown",
+                desc: "Please try another question"
             });
         }
 
         console.log('Received query:', query);
 
-        // Step 1: Convert natural language question to SQL
-        //const sqlQuery = await convertQuestionToSQL(question);
-        //console.log('Generated SQL query:', sqlQuery);
+        //Validate that query is a select statement
+        if (!query.trim().toUpperCase().startsWith('SELECT')) {
+            console.log('Validation failed: Non-SELECT query detected.');
+            return res.status(403).json({
+                raw: {
+                    success: false,
+                    original_query: query,
+                    error: "Query type not allowed. Only SELECT statements are permitted.",
+                    result: "The query was not processed successfully"
+                },
+                markdown: "### 🚫 Query Blocked\nYour query was blocked because it is not a `SELECT` statement. Operations like `INSERT`, `UPDATE`, `DROP`, etc., are not allowed.",
+                type: "markdown",
+                desc: "Only SELECT queries are allowed"
+            });
+        }
 
         // Step 2: Execute the SQL query
         const results = await executeQuery(query);
@@ -393,7 +435,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
         // Step 3: Get AI interpretation of the results
         const chat_summary = await getChatSummaryDemo(query, results);
 
-        //Check wether a graph is necessary
+        //Check whether a graph is necessary
         // Verifica si se necesita un gráfico
         if (graph === "bar") {
             // Maneja el caso de que no haya resultados
@@ -509,7 +551,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 
         // Step 4: Return the response
         const markdownTable = generateMarkdownTable(results);
-        res.json({
+        return res.json({
             raw: {
                 success: true,
                 original_query: query,
@@ -526,7 +568,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 
         // Provide helpful error messages based on the type of error
         if (error.message.includes('convert query to SQL')) {
-            res.status(400).json({
+            return res.json({
                 raw: {
                     success: false,
                     original_query: query,
@@ -538,7 +580,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 desc: "Please try another question"
             });
         } else if (error.message.includes('SQL syntax')) {
-            res.status(400).json({
+            return res.json({
                 raw: {
                     success: false,
                     original_query: query,
@@ -550,7 +592,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 desc: "There was an issue with the generated query"
             });
         } else {
-            res.status(500).json({
+            return res.json({
                 raw: {
                     success: false,
                     original_query: query,
