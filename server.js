@@ -190,8 +190,10 @@ app.post('/api/get_recommendation', async (req, res) => {
 
         console.log('Received query:', query);
 
-        //Validate that query is a select statement
-        if (!query.trim().toUpperCase().startsWith('SELECT')) {
+        //Validate query, check if it doesnt include queries that can change the structure of the table
+        const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
+
+        if (forbiddenPattern.test(query)) {
             console.log('Validation failed: Non-SELECT query detected.');
             return res.status(403).json({
                 raw: {
@@ -410,10 +412,10 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
             });
         }
 
-        console.log('Received query:', query);
+        //Validate query, check if it doesnt include queries that can change the structure of the table
+        const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
 
-        //Validate that query is a select statement
-        if (!query.trim().toUpperCase().startsWith('SELECT')) {
+        if (forbiddenPattern.test(query)) {
             console.log('Validation failed: Non-SELECT query detected.');
             return res.status(403).json({
                 raw: {
