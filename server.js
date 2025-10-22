@@ -163,10 +163,11 @@ async function getChatSummaryDemo(query, db_result) {
     }
 }
 
-async function getChatSummary(query, db_result) {
+async function getChatSummary(query, db_result, user_question) {
     try {
         // Create a more informative prompt including the database results
-        const prompt = `Original query: "${query}"
+        const prompt = `User's question: "${user_question}"
+        SQL query performed: "${query}"
         Database results: ${JSON.stringify(db_result)}
         
         Please provide a natural language summary and interpretation of these results.`;
@@ -258,7 +259,7 @@ app.post('/api/get_recommendation', async (req, res) => {
             });
         }
         // Step 3: Get AI interpretation of the results
-        const chat_summary = await getChatSummary(query, results);
+        const chat_summary = await getChatSummary(query, results, question);
 
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
