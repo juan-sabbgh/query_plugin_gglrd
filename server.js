@@ -203,9 +203,9 @@ app.use(express.json());
 
 app.post('/api/get_recommendation', async (req, res) => {
     try {
-        const { query, graph } = req.body;
+        const { query, graph, question } = req.body;
 
-        console.log(`Query: ${query} \nGraph: ${graph}`)
+        console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
