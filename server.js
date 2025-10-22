@@ -24,6 +24,10 @@ const AS_ACCOUNT = process.env.AS_ACCOUNT;
 const AGENT_TOKEN_DEMO = process.env.AGENT_TOKEN_DEMO;
 const AGENT_KEY_DEMO = process.env.AGENT_KEY_DEMO;
 
+//agent api parameters for the debugging agent
+const AGENT_TOKEN_DEBUG = process.env.AGENT_TOKEN_DEBUG;
+const AGENT_KEY_DEBUG = process.env.AGENT_KEY_DEBUG;
+
 //database parameters
 const DB_HOST = process.env.DB_HOST;
 const DB_PORT = process.env.DB_PORT;
@@ -91,6 +95,36 @@ function generateMarkdownTable(data) {
     }).join('\n');
 
     return `${headerRow}\n${separatorRow}\n${bodyRows}`;
+}
+
+async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token){
+    try {
+        const requestData = {
+            username: as_account,
+            question: prompt
+        };
+        //Get response from the agent
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'cybertron-robot-key': agent_key,
+                'cybertron-robot-token': agent_token
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error en la solicitud: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.data.answer;
+
+    } catch (error) {
+        console.error('Error getting chat summary:', error);
+        throw error;
+    }
 }
 
 async function getChatSummaryDemo(query, db_result) {
@@ -208,39 +242,37 @@ app.post('/api/get_recommendation', async (req, res) => {
             });
         }
 
-        // Step 1: Convert natural language question to SQL
-        //const sqlQuery = await convertQuestionToSQL(question);
-        //console.log('Generated SQL query:', sqlQuery);
-
         // Step 2: Execute the SQL query
         const results = await executeQuery(query);
         console.log('Query results:', results);
 
+        if (!results || results.length === 0) {
+            //prepare prompt for the debug agent
+            prompt_debug = `SQL query: ${query}`
+            response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG)
+            return res.json({
+                markdown: "...",
+                type: "markdown",
+                //query debugging agent response
+                desc: response_debug
+            });
+        }
         // Step 3: Get AI interpretation of the results
         const chat_summary = await getChatSummary(query, results);
 
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
         if (graph === "bar") {
-            // Maneja el caso de que no haya resultados
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "bar", type: "chart",
-                    dimension: null, desc: "No data found for the query."
-                });
-            }
-
-            // 1. Extrae los encabezados de los resultados
+            // 1. Get headers of the results
             const field_headers = Object.keys(results[0]);
 
-            // 2. La "dimensión" suele ser el primer encabezado (ej. la fecha)
+            // 2. Get dimension
             const dimension = field_headers[0];
 
-            // 3. Genera la tabla markdown usando la función auxiliar
+            // 3.Generate markdown table
             const markdownTable = generateMarkdownTable(results);
 
-            // 4. Construye y envía la respuesta en el formato deseado
+            // 4. Send response
             return res.json({
                 data: results,
                 raw: results,
@@ -253,13 +285,6 @@ app.post('/api/get_recommendation', async (req, res) => {
             });
         }
         else if (graph === "line") {
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "line", type: "chart",
-                    dimension: null, desc: "No data found for the query."
-                });
-            }
             const field_headers = Object.keys(results[0]);
             const dimension = field_headers[0];
             const markdownTable = generateMarkdownTable(results);
@@ -276,16 +301,6 @@ app.post('/api/get_recommendation', async (req, res) => {
             });
         }
         else if (graph === "pie") {
-            // Manejo de caso sin resultados
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "pie", type: "chart",
-                    dimension: null, metrics: null, // Añadido metrics: null para consistencia
-                    desc: "No data found for the query."
-                });
-            }
-
             const field_headers = Object.keys(results[0]);
 
             // Para un Pie Chart, la dimensión son las categorías (primera columna)
@@ -310,14 +325,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: chat_summary
             });
         }
-        else if (graph === "scatter") {
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "scatter", type: "chart",
-                    dimension: null, desc: "No data found for the query."
-                });
-            }
+        /*else if (graph === "scatter") {
             const field_headers = Object.keys(results[0]);
             const markdownTable = generateMarkdownTable(results);
 
@@ -331,7 +339,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 dimension: null,
                 desc: chat_summary
             });
-        }
+        }*/
 
         // Step 4: Return the response
         const markdownTable = generateMarkdownTable(results);
@@ -361,7 +369,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 },
                 markdown: "...",
                 type: "markdown",
-                desc: "Please try another question"
+                desc: "Por favor, tente outra pergunta"
             });
         } else if (error.message.includes('SQL syntax')) {
             return res.json({
@@ -373,7 +381,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 },
                 markdown: "...",
                 type: "markdown",
-                desc: "There was an issue with the generated query"
+                desc: "Houve um problema com a consulta gerada"
             });
         } else {
             return res.json({
@@ -385,7 +393,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 },
                 markdown: "...",
                 type: "markdown",
-                desc: "Something went wrong while processing your request"
+                desc: "Algo deu errado ao processar sua solicitação"
             });
         }
     }
