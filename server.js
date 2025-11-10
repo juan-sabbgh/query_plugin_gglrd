@@ -55,14 +55,6 @@ const pool = new Pool(dbConfig);
 async function executeQuery(sql) {
     let connection;
     try {
-        // Obtiene una conexión del pool
-        //connection = await pool.getConnection();
-
-        // Ejecuta la consulta con los parámetros
-        // El driver se encarga de escapar los valores para prevenir inyecciones SQL
-        //const [results] = await connection.execute(sql, []);
-        //console.log(results)
-        //return results;
         const results = await pool.query(sql, []);
         console.log(results.rows);
         return results.rows;
@@ -97,7 +89,7 @@ function generateMarkdownTable(data) {
     return `${headerRow}\n${separatorRow}\n${bodyRows}`;
 }
 
-async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token){
+async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token) {
     try {
         const requestData = {
             username: as_account,
@@ -617,6 +609,35 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
         }
     }
 });
+
+app.post('/api/auth/consultant', async (req, res) => {
+    try {
+        const { name, code } = req.body;
+        const sqlQuery = `SELECT FROM mytable WHERE "Consultant Code" ILIKE '%${code}%' AND "Consultant Name" ILIKE '%${name}%' LIMIT 1;`;
+        console.log(`Query to execute for login`);
+        const result = await executeQuery(sqlQuery);
+
+        if (result.length > 0) {
+            return res.json({
+                success: true,
+                message: `User ${name} logged in successfully`
+            })
+        }
+        else {
+            return res.json({
+                success: false,
+                message: `No consultant found with that name and code`
+            })
+        }
+    }
+    catch (error) {
+        console.log(`Error: ${error}`)
+        return res.json({
+            success: false,
+            message: `An error ocurred, try again`
+        })
+    }
+})
 
 //initialize server with app.listen method, if there are no errors when initializing
 //the server then it will print succesfully in the console, if not then print error
