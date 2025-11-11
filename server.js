@@ -612,7 +612,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 
 app.post('/api/auth/consultant', async (req, res) => {
     try {
-        console.log(req.body);
+        console.log(req);
         const { name, code } = req.body;
         const sqlQuery = `SELECT FROM mytable WHERE "Consultant Code" ILIKE '%${code}%' AND "Consultant Name" ILIKE '%${name}%' LIMIT 1;`;
         console.log(`Query to execute for login`);
