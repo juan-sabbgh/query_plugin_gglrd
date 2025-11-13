@@ -241,7 +241,7 @@ app.post('/api/get_recommendation', async (req, res) => {
 
         if (!results || results.length === 0) {
             //prepare prompt for the debug agent
-            prompt_debug = `SQL query: ${query}`
+            prompt_debug = `SQL query: ${query} \n This query was done by a consultant. Give a personalized answer, the results were filtered by their consultant code`
             response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG)
             return res.json({
                 markdown: "...",
@@ -318,21 +318,6 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: chat_summary
             });
         }
-        /*else if (graph === "scatter") {
-            const field_headers = Object.keys(results[0]);
-            const markdownTable = generateMarkdownTable(results);
-
-            return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "scatter",
-                type: "chart",
-                dimension: null,
-                desc: chat_summary
-            });
-        }*/
 
         // Step 4: Return the response
         const markdownTable = generateMarkdownTable(results);
@@ -612,7 +597,6 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 
 app.post('/api/auth/consultant', async (req, res) => {
     try {
-        console.log(req);
         const { name, code } = req.body;
         const sqlQuery = `SELECT FROM mytable WHERE "Consultant Code" ILIKE '%${code}%' AND "Consultant Name" ILIKE '%${name}%' LIMIT 1;`;
         console.log(`Query to execute for login`);
