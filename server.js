@@ -830,7 +830,7 @@ app.post('/api/auth/coordinator', async (req, res) => {
             return res.json({
                 success: true,
                 message: `User ${name} logged in successfully`,
-                results: result
+                results: result[0]
             })
         }
         else {
