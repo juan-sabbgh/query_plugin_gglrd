@@ -815,7 +815,7 @@ app.post('/api/auth/consultant', async (req, res) => {
 app.post('/api/auth/coordinator', async (req, res) => {
     try {
         const { name } = req.body;
-        const sqlQuery = `SELECT FROM mytable WHERE "Coordinator" ILIKE '%${name}%';`;
+        const sqlQuery = `SELECT DISTINCT "Coordinator" FROM mytable WHERE "Coordinator" ILIKE '%${name}%';`;
         console.log(`Query to execute for login`);
         const result = await executeQuery(sqlQuery);
 
