@@ -20,6 +20,10 @@ const AGENT_TOKEN = process.env.AGENT_TOKEN;
 const AGENT_KEY = process.env.AGENT_KEY;
 const AS_ACCOUNT = process.env.AS_ACCOUNT;
 
+//agent api parameters for the coordinator agent
+const AGENT_TOKEN_COORD = process.env.AGENT_TOKEN_COORD;
+const AGENT_KEY_COORD = process.env.AGENT_KEY_COORD;
+
 //agent api parameters for demo
 const AGENT_TOKEN_DEMO = process.env.AGENT_TOKEN_DEMO;
 const AGENT_KEY_DEMO = process.env.AGENT_KEY_DEMO;
@@ -439,7 +443,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         Database results: ${JSON.stringify(results)}
         
         Please provide a natural language summary and interpretation of these results.`;
-        const chat_summary = await getChatSummary(query, results, question);
+        const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
 
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
