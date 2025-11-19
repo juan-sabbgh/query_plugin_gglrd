@@ -445,6 +445,8 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         Please provide a natural language summary and interpretation of these results.`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
 
+        const chat_summary_new = chat_summary.replace(/$/g, "$ ");
+
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
         if (graph === "bar") {
@@ -466,7 +468,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
                 chart_type: "bar",
                 type: "chart",
                 dimension: dimension,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
         else if (graph === "line") {
@@ -482,7 +484,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
                 chart_type: "line",
                 type: "chart",
                 dimension: dimension,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
         else if (graph === "pie") {
@@ -507,7 +509,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
                 type: "chart",
                 dimension: dimension,
                 metrics: metrics, // <-- CAMBIO CLAVE: Se añade el campo "metrics"
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
 
@@ -522,7 +524,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
             },
             markdown: markdownTable,
             type: "markdown",
-            desc: chat_summary
+            desc: chat_summary_new
         });
 
     } catch (error) {
