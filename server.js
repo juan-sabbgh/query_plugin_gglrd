@@ -446,6 +446,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
 
         const chat_summary_new = chat_summary.replace(/\$/g, " $ ");
+        console.log(chat_summary_new);
 
 
         //Check wether a graph is necessary
@@ -793,20 +794,29 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 app.post('/api/auth/consultant', async (req, res) => {
     try {
         const { name, code } = req.body;
-        const sqlQuery = `SELECT FROM mytable WHERE "Consultant Code" ILIKE '%${code}%' AND "Consultant Name" ILIKE '%${name}%' LIMIT 1;`;
+        const sqlQuery = `SELECT DISTINCT "Consultant Name" FROM mytable WHERE "Consultant Name" ILIKE '%${name}%';`;
         console.log(`Query to execute for login`);
         const result = await executeQuery(sqlQuery);
 
         if (result.length > 0) {
+            if (result.length > 1) {
+                return res.json({
+                    success: true,
+                    message: `multiple consultants with the same name`,
+                    result: result
+                })
+            }
             return res.json({
                 success: true,
-                message: `User ${name} logged in successfully`
+                message: `User ${name} logged in successfully`,
+                result: result
             })
         }
         else {
             return res.json({
                 success: false,
-                message: `No consultant found with that name and code`
+                message: `No consultant found with that name and code`,
+                result: result
             })
         }
     }
