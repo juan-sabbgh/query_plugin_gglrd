@@ -636,9 +636,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
         SQL query performed: "${query}"
-        Database results: ${JSON.stringify(results)}
-        
-        Please provide a natural language summary and interpretation of these results.`;
+        Database results: ${JSON.stringify(results)}`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_DIRECT, AGENT_TOKEN_DIRECT);
 
         const chat_summary_new = chat_summary.replace(/\$/g, " $ ");
