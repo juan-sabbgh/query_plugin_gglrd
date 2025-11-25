@@ -36,6 +36,10 @@ const AGENT_KEY_DEMO = process.env.AGENT_KEY_DEMO;
 const AGENT_TOKEN_DEBUG = process.env.AGENT_TOKEN_DEBUG;
 const AGENT_KEY_DEBUG = process.env.AGENT_KEY_DEBUG;
 
+//agent api parameters for the fixer agent
+const AGENT_TOKEN_FIXER = process.env.AGENT_TOKEN_FIXER;
+const AGENT_KEY_FIXER = process.env.AGENT_KEY_FIXER;
+
 //database parameters
 const DB_HOST = process.env.DB_HOST;
 const DB_PORT = process.env.DB_PORT;
@@ -62,23 +66,62 @@ const pool = new Pool(dbConfig);
 
 async function executeQuery(sql) {
     let connection;
+
     try {
+        // 1️⃣ Try the original query
         const results = await pool.query(sql, []);
-        console.log(results.rows);
+        console.log("✅ SQL OK:", results.rows);
         return results.rows;
 
-
     } catch (error) {
-        // Si hay un error, lo muestra en consola y lo lanza para que sea manejado
-        console.error("Error en la consulta SQL syntax:", error);
-        throw error;
+        console.error("❌ SQL error:", error.message);
+
+        // 2️⃣ Send failing SQL to Debug Agent
+        const debugPrompt = `
+The following SQL query failed:
+
+${sql}
+
+PostgreSQL error:
+${error.message}
+
+Fix the SQL query.
+Return ONLY the corrected SQL with no explanation, no markdown.
+`;
+
+        let fixedSQL;
+
+        try {
+            fixedSQL = await getChatSummaryGeneral(
+                AS_ACCOUNT,
+                debugPrompt,
+                AGENT_KEY_FIXER,
+                AGENT_TOKEN_FIXER
+            );
+        } catch (debugError) {
+            console.error("❌ Debug agent failed:", debugError);
+            throw error; // rethrow original error
+        }
+
+        console.log("🔧 Fixed SQL from debug agent:", fixedSQL);
+
+        // 3️⃣ Try running the corrected SQL
+        try {
+            const fixedResults = await pool.query(fixedSQL, []);
+            console.log("✅ Fixed SQL executed:", fixedResults.rows);
+            return fixedResults.rows;
+        } catch (fixedError) {
+            console.error("❌ Fixed SQL ALSO failed:", fixedError.message);
+            throw fixedError; // Fatal
+        }
+
     } finally {
-        // Asegura que la conexión se libere y vuelva al pool, sin importar si hubo error o no
         if (connection) {
             connection.release();
         }
     }
 }
+
 
 function generateMarkdownTable(data) {
     if (!data || data.length === 0) {
@@ -244,7 +287,7 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         // Step 2: Execute the SQL query
-        const results = await executeQuery(query);
+        let results = await executeQuery(query);
         console.log('Query results:', results);
 
         if (!results || results.length === 0) {
@@ -258,8 +301,15 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: response_debug
             });
         }
+        let chat_summary_new = "";
+        if(results.length > 100){
+            console.log("Cut results for only 100 rows");
+            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
+            results = results.slice(0,100);
+        }
         // Step 3: Get AI interpretation of the results
         const chat_summary = await getChatSummary(query, results, question);
+        chat_summary_new = chat_summary_new + chat_summary
 
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
@@ -282,7 +332,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 chart_type: "bar",
                 type: "chart",
                 dimension: dimension,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
         else if (graph === "line") {
@@ -298,7 +348,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 chart_type: "line",
                 type: "chart",
                 dimension: dimension,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
         else if (graph === "pie") {
@@ -323,7 +373,7 @@ app.post('/api/get_recommendation', async (req, res) => {
                 type: "chart",
                 dimension: dimension,
                 metrics: metrics, // <-- CAMBIO CLAVE: Se añade el campo "metrics"
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
 
@@ -338,7 +388,7 @@ app.post('/api/get_recommendation', async (req, res) => {
             },
             markdown: markdownTable,
             type: "markdown",
-            desc: chat_summary
+            desc: chat_summary_new
         });
 
     } catch (error) {
@@ -427,7 +477,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         }
 
         // Step 2: Execute the SQL query
-        const results = await executeQuery(query);
+        let results = await executeQuery(query);
         console.log('Query results:', results);
 
         if (!results || results.length === 0) {
@@ -441,6 +491,12 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
                 desc: response_debug
             });
         }
+        let chat_summary_new = "";
+        if(results.length > 100){
+            console.log("Cut results for only 100 rows");
+            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
+            results = results.slice(0,100);
+        }
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
         SQL query performed: "${query}"
@@ -449,7 +505,8 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         Please provide a natural language summary and interpretation of these results.`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
 
-        const chat_summary_new = chat_summary.replace(/\$/g, " $ ");
+        //chat_summary_new = chat_summary.replace(/\$/g, " $ ");
+        chat_summary_new = chat_summary_new + chat_summary
         console.log(chat_summary_new);
 
 
@@ -619,7 +676,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         }
 
         // Step 2: Execute the SQL query
-        const results = await executeQuery(query);
+        let results = await executeQuery(query);
         console.log('Query results:', results);
 
         if (!results || results.length === 0) {
@@ -633,13 +690,21 @@ app.post('/api/get_recommendation_director', async (req, res) => {
                 desc: response_debug
             });
         }
+        let chat_summary_new = "";
+        if(results.length > 100){
+            console.log("Cut results for only 100 rows");
+            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
+            results = results.slice(0,100);
+        }
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
         SQL query performed: "${query}"
         Database results: ${JSON.stringify(results)}`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_DIRECT, AGENT_TOKEN_DIRECT);
+        
+        //chat_summary_new = chat_summary.replace(/\$/g, "$");
+        chat_summary_new = chat_summary_new + chat_summary
 
-        const chat_summary_new = chat_summary.replace(/\$/g, " $ ");
         console.log(chat_summary_new);
 
 
