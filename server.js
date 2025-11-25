@@ -1109,8 +1109,8 @@ app.post('/api/auth/consultant', async (req, res) => {
 
 app.post('/api/auth/coordinator', async (req, res) => {
     try {
-        const { name } = req.body;
-        const sqlQuery = `SELECT DISTINCT "Coordinator" FROM mytable WHERE "Coordinator" ILIKE '%${name}%';`;
+        const { name, password } = req.body;
+        const sqlQuery = `SELECT "Coordinator" FROM coordinators_passwords WHERE "Coordinator" = '${name}' AND passwords = '${password}';`;
         console.log(`Query to execute for login`);
         const result = await executeQueryAuth(sqlQuery);
 
