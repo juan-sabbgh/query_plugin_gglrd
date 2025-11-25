@@ -1052,8 +1052,8 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 
 app.post('/api/auth/consultant', async (req, res) => {
     try {
-        const { name, code } = req.body;
-        const sqlQuery = `SELECT DISTINCT "Consultant Name" FROM mytable WHERE "Consultant Name" ILIKE '%${name}%';`;
+        const { name, password } = req.body;
+        const sqlQuery = `SELECT "Consultant Name" FROM mytable WHERE "Consultant Name" = ${name} AND password = ${password};`;
         console.log(`Query to execute for login`);
         const result = await executeQuery(sqlQuery);
 
@@ -1074,7 +1074,7 @@ app.post('/api/auth/consultant', async (req, res) => {
         else {
             return res.json({
                 success: false,
-                message: `No consultant found with that name and code`,
+                message: `No consultant found with that name and password`,
                 result: result
             })
         }
