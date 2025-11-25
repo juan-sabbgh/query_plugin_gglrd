@@ -123,6 +123,25 @@ Return ONLY the corrected SQL with no explanation, no markdown.
 }
 
 
+async function executeQueryAuth(sql) {
+    let connection;
+    try {
+        // 1️⃣ Try the original query
+        const results = await pool.query(sql, []);
+        console.log("✅ SQL OK:", results.rows);
+        return results.rows;
+
+    } catch (error) {
+        console.error("❌ SQL error:", error.message);
+        throw error;
+    } finally {
+        if (connection) {
+            connection.release();
+        }
+    }
+}
+
+
 function generateMarkdownTable(data) {
     if (!data || data.length === 0) {
         return "No data to be shown";
@@ -1053,9 +1072,9 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 app.post('/api/auth/consultant', async (req, res) => {
     try {
         const { name, password } = req.body;
-        const sqlQuery = `SELECT "Consultant Name" FROM mytable WHERE "Consultant Name" = ${name} AND password = ${password};`;
+        const sqlQuery = `SELECT "Consultant Name" FROM consultants_passwords WHERE "Consultant Name" = ${name} AND password = ${password};`;
         console.log(`Query to execute for login`);
-        const result = await executeQuery(sqlQuery);
+        const result = await executeQueryAuth(sqlQuery);
 
         if (result.length > 0) {
             if (result.length > 1) {
@@ -1093,7 +1112,7 @@ app.post('/api/auth/coordinator', async (req, res) => {
         const { name } = req.body;
         const sqlQuery = `SELECT DISTINCT "Coordinator" FROM mytable WHERE "Coordinator" ILIKE '%${name}%';`;
         console.log(`Query to execute for login`);
-        const result = await executeQuery(sqlQuery);
+        const result = await executeQueryAuth(sqlQuery);
 
         if (result.length > 0) {
             if (result.length > 1) {
