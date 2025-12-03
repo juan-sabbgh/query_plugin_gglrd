@@ -1146,6 +1146,94 @@ app.post('/api/auth/coordinator', async (req, res) => {
     }
 })
 
+
+
+//Sqlite configuration
+// 1. Configuración de la Base de Datos SQLite
+// Esto crea un archivo 'consultants.db' si no existe
+const db = new sqlite3.Database('./consultants.db', (err) => {
+    if (err) {
+        console.error('Error al abrir la base de datos', err.message);
+    } else {
+        console.log('Conectado a la base de datos SQLite.');
+        initializeTable();
+    }
+});
+
+// 2. Inicializar tabla (Necesaria para que funcione el endpoint)
+// Marcamos 'name' como UNIQUE para poder hacer el "Upsert" (Insertar o Actualizar)
+function initializeTable() {
+    const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS consultants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+    db.run(createTableQuery, (err) => {
+        if (err) console.error("Error creando tabla:", err);
+        else console.log("Tabla 'consultants' lista.");
+    });
+}
+
+// 3. El Endpoint Solicitado (Add or Update)
+app.post('/api/db/add_name_db', (req, res) => {
+    try {
+        const { name } = req.body;
+
+        // Validación básica
+        if (!name) {
+            return res.status(400).json({
+                success: false,
+                message: "El campo 'name' es obligatorio"
+            });
+        }
+
+        console.log(`Intentando agregar/actualizar: ${name}`);
+
+        // QUERY SQLITE:
+        // Usamos ON CONFLICT(name) para detectar si ya existe.
+        // Si existe, actualizamos el campo 'updated_at'.
+        // Si no existe, lo inserta.
+        const sqlQuery = `
+            INSERT INTO consultants (name, updated_at) 
+            VALUES (?, CURRENT_TIMESTAMP)
+            ON CONFLICT(name) 
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+        `;
+
+        // Ejecutar la query usando 'run' (para inserts/updates que no devuelven filas)
+        // El 'this.lastID' y 'this.changes' contienen info sobre la operación
+        db.run(sqlQuery, [name], function(err) {
+            if (err) {
+                console.error(`Error SQL: ${err.message}`);
+                return res.status(500).json({
+                    success: false,
+                    message: "Error al interactuar con la base de datos",
+                    error: err.message
+                });
+            }
+
+            // this.changes > 0 significa que algo pasó (insert o update)
+            return res.json({
+                success: true,
+                message: `Consultant '${name}' processed successfully`,
+                details: {
+                    id: this.lastID, // ID si fue un insert nuevo
+                    changes: this.changes // Filas afectadas
+                }
+            });
+        });
+
+    } catch (error) {
+        console.error(`Error del servidor: ${error}`);
+        return res.status(500).json({
+            success: false,
+            message: "Error interno del servidor"
+        });
+    }
+});
+
 //initialize server with app.listen method, if there are no errors when initializing
 //the server then it will print succesfully in the console, if not then print error
 app.listen(PORT, (error) => {
