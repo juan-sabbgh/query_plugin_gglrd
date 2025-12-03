@@ -195,7 +195,7 @@ async function getChatSummaryDemo(query, db_result) {
         const prompt = `Original query: "${query}"
         Database results: ${JSON.stringify(db_result)}
         
-        Please provide a natural language summary and interpretation of these results.`;
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
 
         const requestData = {
             username: AS_ACCOUNT,
@@ -232,7 +232,7 @@ async function getChatSummary(query, db_result, user_question) {
         SQL query performed: "${query}"
         Database results: ${JSON.stringify(db_result)}
         
-        Please provide a natural language summary and interpretation of these results.`;
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
 
         const requestData = {
             username: AS_ACCOUNT,
@@ -521,7 +521,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         SQL query performed: "${query}"
         Database results: ${JSON.stringify(results)}
         
-        Please provide a natural language summary and interpretation of these results.`;
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
 
         //chat_summary_new = chat_summary.replace(/\$/g, " $ ");
@@ -718,7 +718,9 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
         SQL query performed: "${query}"
-        Database results: ${JSON.stringify(results)}`;
+        Database results: ${JSON.stringify(results)}
+        
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_DIRECT, AGENT_TOKEN_DIRECT);
         
         //chat_summary_new = chat_summary.replace(/\$/g, "$");
