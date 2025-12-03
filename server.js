@@ -267,7 +267,7 @@ app.use(express.json());
 app.post('/api/get_recommendation', async (req, res) => {
     try {
         const { query, graph, question } = req.body;
-        console.log(req);
+        console.log(req.body);
         console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
         // Input validation
@@ -1074,7 +1074,7 @@ app.post('/api/auth/consultant', async (req, res) => {
         const { name, password } = req.body;
         console.log(req);
         const sqlQuery = `SELECT "Consultant Name" FROM consultants_passwords WHERE "Consultant Name" = '${name}' AND passwords = '${password}';`;
-        console.log(`Query to execute for login`);
+        //console.log(`Query to execute for login`);
         const result = await executeQueryAuth(sqlQuery);
 
         if (result.length > 0) {
@@ -1151,7 +1151,7 @@ app.post('/api/auth/coordinator', async (req, res) => {
 app.post('/api/db/add_name_db', async (req, res) => {
     try {
         const { name } = req.body;
-        console.log(req);
+        //console.log(req);
         
         // Validación básica
         if (!name) {
