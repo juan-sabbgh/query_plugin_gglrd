@@ -1,6 +1,7 @@
 //import express library
 const express = require('express');
 const mysql = require('mysql2/promise');
+const sqlite3 = require('sqlite3').verbose();
 
 // Importa la clase Pool desde la librería 'pg'
 const { Pool } = require('pg');
@@ -1180,7 +1181,7 @@ function initializeTable() {
 app.post('/api/db/add_name_db', (req, res) => {
     try {
         const { name } = req.body;
-
+        console.log(req.body);
         // Validación básica
         if (!name) {
             return res.status(400).json({
