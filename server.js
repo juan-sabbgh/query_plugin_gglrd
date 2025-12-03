@@ -267,7 +267,7 @@ app.use(express.json());
 app.post('/api/get_recommendation', async (req, res) => {
     try {
         const { query, graph, question } = req.body;
-
+        console.log(req.body);
         console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
         // Input validation
