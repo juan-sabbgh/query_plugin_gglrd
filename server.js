@@ -1072,6 +1072,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
 app.post('/api/auth/consultant', async (req, res) => {
     try {
         const { name, password } = req.body;
+        console.log(req.body);
         const sqlQuery = `SELECT "Consultant Name" FROM consultants_passwords WHERE "Consultant Name" = '${name}' AND passwords = '${password}';`;
         console.log(`Query to execute for login`);
         const result = await executeQueryAuth(sqlQuery);
