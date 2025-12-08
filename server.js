@@ -270,7 +270,7 @@ app.use(express.json());
 
 app.post('/api/get_recommendation', async (req, res) => {
     try {
-        const { query, graph, question } = req.body;
+        const { query, graph, question, function_call_username } = req.body;
         console.log(req.body);
         console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
@@ -316,10 +316,8 @@ app.post('/api/get_recommendation', async (req, res) => {
         //Ensure query is filtered correctly
         const prompt_filter = `Query = ${query}
         Name = ${query_get_name[0]}
-        Hierarchy = Consultant
-        `
+        Hierarchy = Consultant`
         query = getChatSummaryGeneral(AS_ACCOUNT,prompt_filter,AGENT_KEY_FILTER,AGENT_TOKEN_FILTER);
-
 
         // Step 2: Execute the SQL query
         let results = await executeQuery(query);
