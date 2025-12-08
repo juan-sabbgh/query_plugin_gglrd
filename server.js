@@ -311,7 +311,7 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         //get name of the user
-        const query_get_name  = await executeQueryAuth(`SELECT name FROM consultants WHERE username = ${function_call_username};`);
+        const query_get_name  = await executeQueryAuth(`SELECT name FROM consultants WHERE username = "${function_call_username}";`);
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
@@ -320,6 +320,7 @@ app.post('/api/get_recommendation', async (req, res) => {
         Hierarchy = Consultant`
         query = await getChatSummaryGeneral(AS_ACCOUNT,prompt_filter,AGENT_KEY_FILTER,AGENT_TOKEN_FILTER);
 
+        console.log(`New Query: ${query}`)
         // Step 2: Execute the SQL query
         let results = await executeQuery(query);
         console.log('Query results:', results);
