@@ -40,6 +40,10 @@ const AGENT_KEY_DEBUG = process.env.AGENT_KEY_DEBUG;
 const AGENT_TOKEN_FIXER = process.env.AGENT_TOKEN_FIXER;
 const AGENT_KEY_FIXER = process.env.AGENT_KEY_FIXER;
 
+//agent api parameters for the filter agent
+const AGENT_TOKEN_FILTER = process.env.AGENT_TOKEN_FILTER;
+const AGENT_KEY_FILTER = process.env.AGENT_KEY_FILTER;
+
 //database parameters
 const DB_HOST = process.env.DB_HOST;
 const DB_PORT = process.env.DB_PORT;
@@ -304,6 +308,18 @@ app.post('/api/get_recommendation', async (req, res) => {
                 desc: "Only SELECT queries are allowed"
             });
         }
+
+        //get name of the user
+        const query_get_name  = executeQueryAuth(`SELECT name FROM consultants WHERE username = ${function_call_username};`);
+        console.log(query_get_name)
+
+        //Ensure query is filtered correctly
+        const prompt_filter = `Query = ${query}
+        Name = ${query_get_name[0]}
+        Hierarchy = Consultant
+        `
+        query = getChatSummaryGeneral(AS_ACCOUNT,prompt_filter,AGENT_KEY_FILTER,AGENT_TOKEN_FILTER);
+
 
         // Step 2: Execute the SQL query
         let results = await executeQuery(query);
