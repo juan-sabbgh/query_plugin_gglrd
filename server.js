@@ -311,7 +311,7 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         //get name of the user
-        const query_get_name  = await executeQueryAuth(`SELECT name FROM consultants WHERE username = "${function_call_username}";`);
+        const query_get_name  = await executeQueryAuth(`SELECT name FROM consultants WHERE username = '${function_call_username}';`);
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
