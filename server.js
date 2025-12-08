@@ -1170,8 +1170,7 @@ app.post('/api/db/add_name_db', async (req, res) => {
             VALUES ($1, $2)
             ON CONFLICT (username) 
             DO UPDATE SET 
-                name = EXCLUDED.name,
-                updated_at = CURRENT_TIMESTAMP
+                name = EXCLUDED.name
             RETURNING *;
         `;
 
