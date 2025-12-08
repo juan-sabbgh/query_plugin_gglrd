@@ -719,7 +719,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         prompt_results = `User's question: "${question}"
         SQL query performed: "${query}"
         Database results: ${JSON.stringify(results)}
-        
+
         Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_DIRECT, AGENT_TOKEN_DIRECT);
         
@@ -1152,45 +1152,41 @@ app.post('/api/auth/coordinator', async (req, res) => {
 // 3. El Endpoint Solicitado (Add or Update)
 app.post('/api/db/add_name_db', async (req, res) => {
     try {
-        const { name } = req.body;
-        //console.log(req);
+        const { name, username } = req.body;
         
-        // Validación básica
-        if (!name) {
+        // Validación mejorada
+        if (!name || !username) {
             return res.status(400).json({
                 success: false,
-                message: "El campo 'name' es obligatorio"
+                message: "Los campos 'name' y 'username' son obligatorios"
             });
         }
 
-        console.log(`Intentando agregar/actualizar en SUPABASE: ${name}`);
+        console.log(`Intentando agregar/actualizar en SUPABASE para usuario: ${username} (nombre: ${name})`);
 
-        // QUERY POSTGRESQL (Supabase):
-        // Sintaxis casi idéntica, pero usamos $1 en lugar de ? para los parámetros
-        // Y usamos pool.query directamente.
+        // QUERY corregida
         const sqlQuery = `
-            INSERT INTO consultants (name, updated_at) 
-            VALUES ($1, CURRENT_TIMESTAMP)
-            ON CONFLICT (name) 
-            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            INSERT INTO consultants (username, name) 
+            VALUES ($1, $2)
+            ON CONFLICT (username) 
+            DO UPDATE SET 
+                name = EXCLUDED.name,
+                updated_at = CURRENT_TIMESTAMP
             RETURNING *;
         `;
 
-        // Ejecutar la query usando el pool de Postgres
-        const result = await pool.query(sqlQuery, [name]);
+        // Ejecutar la query con ambos parámetros
+        const result = await pool.query(sqlQuery, [username, name]);
         
-        // Si hay filas en result.rows, significa que insertó o actualizó correctamente
         return res.json({
             success: true,
-            message: `Consultant '${name}' processed successfully`,
-            details: {
-                data: result.rows[0], // Devuelve el registro insertado/actualizado
-                rowCount: result.rowCount
-            }
+            message: `Consultant '${name}' (usuario: ${username}) procesado exitosamente`,
+            data: result.rows[0],
+            rowCount: result.rowCount
         });
 
     } catch (error) {
-        console.error(`Error del servidor: ${error.message}`);
+        console.error(`Error del servidor en /api/db/add_name_db:`, error);
         return res.status(500).json({
             success: false,
             message: "Error interno del servidor",
