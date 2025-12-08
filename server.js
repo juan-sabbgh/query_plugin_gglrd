@@ -1157,7 +1157,7 @@ app.post('/api/db/add_name_db', async (req, res) => {
         // Validación mejorada
         if (!name || !username) {
             return res.status(400).json({
-                success: false,
+                success: "false",
                 message: "Los campos 'name' y 'username' son obligatorios"
             });
         }
@@ -1178,7 +1178,7 @@ app.post('/api/db/add_name_db', async (req, res) => {
         const result = await pool.query(sqlQuery, [username, name]);
         
         return res.json({
-            success: true,
+            success: "true",
             message: `Consultant '${name}' (usuario: ${username}) procesado exitosamente`,
             data: result.rows[0],
             rowCount: result.rowCount
@@ -1187,7 +1187,7 @@ app.post('/api/db/add_name_db', async (req, res) => {
     } catch (error) {
         console.error(`Error del servidor en /api/db/add_name_db:`, error);
         return res.status(500).json({
-            success: false,
+            success: "false",
             message: "Error interno del servidor",
             error: error.message
         });
