@@ -271,7 +271,7 @@ app.use(express.json());
 app.post('/api/get_recommendation', async (req, res) => {
     try {
         const { query, graph, question, function_call_username } = req.body;
-        console.log(req.body);
+        //console.log(req.body);
         console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
         // Input validation
@@ -310,14 +310,14 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         //get name of the user
-        const query_get_name  = executeQueryAuth(`SELECT name FROM consultants WHERE username = ${function_call_username};`);
+        const query_get_name  = await executeQueryAuth(`SELECT name FROM consultants WHERE username = ${function_call_username};`);
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
         const prompt_filter = `Query = ${query}
         Name = ${query_get_name[0]}
         Hierarchy = Consultant`
-        query = getChatSummaryGeneral(AS_ACCOUNT,prompt_filter,AGENT_KEY_FILTER,AGENT_TOKEN_FILTER);
+        query = await getChatSummaryGeneral(AS_ACCOUNT,prompt_filter,AGENT_KEY_FILTER,AGENT_TOKEN_FILTER);
 
         // Step 2: Execute the SQL query
         let results = await executeQuery(query);
