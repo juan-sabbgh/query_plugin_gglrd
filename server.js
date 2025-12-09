@@ -86,10 +86,10 @@ async function executeQuery(sql) {
                     // Convertir a solo fecha
                     const date = new Date(value);
                     formattedRow[key] = date.toISOString().split('T')[0];
-
-                    // O si quieres mantener como objeto Date pero sin hora:
-                    // date.setHours(0, 0, 0, 0);
-                    // formattedRow[key] = date;
+                }
+                if (key === 'Branch Name' && value && typeof value === 'string') {
+                    // Extraer las dos primeras letras en mayúsculas
+                    processedRow[key] = value.substring(0, 2).toUpperCase();
                 }
             });
             return formattedRow;
