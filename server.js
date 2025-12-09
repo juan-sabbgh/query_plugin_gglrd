@@ -74,8 +74,29 @@ async function executeQuery(sql) {
     try {
         // 1️⃣ Try the original query
         const results = await pool.query(sql, []);
-        console.log("✅ SQL OK:", results.rows);
-        return results.rows;
+
+        // Formatear fechas si existen
+        const formattedRows = results.rows.map(row => {
+            const formattedRow = { ...row };
+            Object.keys(formattedRow).forEach(key => {
+                const value = formattedRow[key];
+                // Si es una fecha/timestamp
+                if (value instanceof Date ||
+                    (typeof value === 'string' && value.includes('T'))) {
+                    // Convertir a solo fecha
+                    const date = new Date(value);
+                    formattedRow[key] = date.toISOString().split('T')[0];
+
+                    // O si quieres mantener como objeto Date pero sin hora:
+                    // date.setHours(0, 0, 0, 0);
+                    // formattedRow[key] = date;
+                }
+            });
+            return formattedRow;
+        });
+
+        console.log("✅ SQL OK:", formattedRows);
+        return formattedRows;
 
     } catch (error) {
         console.error("❌ SQL error:", error.message);
@@ -311,7 +332,7 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         //get name of the user
-        const query_get_name  = await executeQueryAuth(`SELECT name FROM consultants WHERE username = '${function_call_username}';`);
+        const query_get_name = await executeQueryAuth(`SELECT name FROM consultants WHERE username = '${function_call_username}';`);
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
@@ -337,10 +358,10 @@ app.post('/api/get_recommendation', async (req, res) => {
             });
         }
         let chat_summary_new = "";
-        if(results.length > 100){
+        if (results.length > 100) {
             console.log("Cut results for only 100 rows");
             chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0,100);
+            results = results.slice(0, 100);
         }
         // Step 3: Get AI interpretation of the results
         const chat_summary = await getChatSummary(query, results, question);
@@ -513,7 +534,7 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
         }
 
         //get name of the user
-        const query_get_name  = await executeQueryAuth(`SELECT name FROM coordinators WHERE username = '${function_call_username}';`);
+        const query_get_name = await executeQueryAuth(`SELECT name FROM coordinators WHERE username = '${function_call_username}';`);
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
@@ -540,10 +561,10 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
             });
         }
         let chat_summary_new = "";
-        if(results.length > 100){
+        if (results.length > 100) {
             console.log("Cut results for only 100 rows");
             chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0,100);
+            results = results.slice(0, 100);
         }
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
@@ -739,10 +760,10 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             });
         }
         let chat_summary_new = "";
-        if(results.length > 100){
+        if (results.length > 100) {
             console.log("Cut results for only 100 rows");
             chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0,100);
+            results = results.slice(0, 100);
         }
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
@@ -751,7 +772,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
 
         Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
         const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_DIRECT, AGENT_TOKEN_DIRECT);
-        
+
         //chat_summary_new = chat_summary.replace(/\$/g, "$");
         chat_summary_new = chat_summary_new + chat_summary
 
@@ -1182,7 +1203,7 @@ app.post('/api/auth/coordinator', async (req, res) => {
 app.post('/api/db/add_name_db', async (req, res) => {
     try {
         const { name, username } = req.body;
-        
+
         // Validación mejorada
         if (!name || !username) {
             return res.status(400).json({
@@ -1205,7 +1226,7 @@ app.post('/api/db/add_name_db', async (req, res) => {
 
         // Ejecutar la query con ambos parámetros
         const result = await pool.query(sqlQuery, [username, name]);
-        
+
         return res.json({
             success: "true",
             message: `Consultant '${name}' (usuario: ${username}) procesado exitosamente`,
@@ -1226,7 +1247,7 @@ app.post('/api/db/add_name_db', async (req, res) => {
 app.post('/api/db/add_name_db_coordinators', async (req, res) => {
     try {
         const { name, username } = req.body;
-        
+
         // Validación mejorada
         if (!name || !username) {
             return res.status(400).json({
@@ -1249,7 +1270,7 @@ app.post('/api/db/add_name_db_coordinators', async (req, res) => {
 
         // Ejecutar la query con ambos parámetros
         const result = await pool.query(sqlQuery, [username, name]);
-        
+
         return res.json({
             success: "true",
             message: `Consultant '${name}' (usuario: ${username}) procesado exitosamente`,
