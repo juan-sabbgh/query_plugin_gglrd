@@ -81,8 +81,7 @@ async function executeQuery(sql) {
             Object.keys(formattedRow).forEach(key => {
                 const value = formattedRow[key];
                 // Si es una fecha/timestamp
-                if (value instanceof Date ||
-                    (typeof value === 'string' && value.includes('T'))) {
+                if (value instanceof Date) {
                     // Convertir a solo fecha
                     const date = new Date(value);
                     formattedRow[key] = date.toISOString().split('T')[0];
