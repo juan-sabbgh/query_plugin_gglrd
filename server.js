@@ -1210,6 +1210,50 @@ app.post('/api/db/add_name_db', async (req, res) => {
     }
 });
 
+app.post('/api/db/add_name_db_coordinators', async (req, res) => {
+    try {
+        const { name, username } = req.body;
+        
+        // Validación mejorada
+        if (!name || !username) {
+            return res.status(400).json({
+                success: "false",
+                message: "Los campos 'name' y 'username' son obligatorios"
+            });
+        }
+
+        console.log(`Intentando agregar/actualizar en SUPABASE para usuario: ${username} (nombre: ${name})`);
+
+        // QUERY corregida
+        const sqlQuery = `
+            INSERT INTO coordinators (username, name) 
+            VALUES ($1, $2)
+            ON CONFLICT (username) 
+            DO UPDATE SET 
+                name = EXCLUDED.name
+            RETURNING *;
+        `;
+
+        // Ejecutar la query con ambos parámetros
+        const result = await pool.query(sqlQuery, [username, name]);
+        
+        return res.json({
+            success: "true",
+            message: `Consultant '${name}' (usuario: ${username}) procesado exitosamente`,
+            data: result.rows[0],
+            rowCount: result.rowCount
+        });
+
+    } catch (error) {
+        console.error(`Error del servidor en /api/db/add_name_db:`, error);
+        return res.status(500).json({
+            success: "false",
+            message: "Error interno del servidor",
+            error: error.message
+        });
+    }
+});
+
 //initialize server with app.listen method, if there are no errors when initializing
 //the server then it will print succesfully in the console, if not then print error
 app.listen(PORT, (error) => {
