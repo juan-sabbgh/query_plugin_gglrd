@@ -88,7 +88,7 @@ async function executeQuery(sql) {
                 }
                 if (key === 'Branch Name' && value && typeof value === 'string') {
                     // Extraer las dos primeras letras en mayúsculas
-                    processedRow[key] = value.substring(0, 2).toUpperCase();
+                    formattedRow[key] = value.substring(0, 2).toUpperCase();
                 }
             });
             return formattedRow;
