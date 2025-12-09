@@ -472,8 +472,9 @@ app.post('/api/get_recommendation', async (req, res) => {
 
 app.post('/api/get_recommendation_coordinator', async (req, res) => {
     try {
-        const { query, graph, question } = req.body;
-
+        const { graph, question, function_call_username } = req.body;
+        let { query } = req.body;
+        //console.log(req.body);
         console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
         // Input validation
@@ -510,6 +511,18 @@ app.post('/api/get_recommendation_coordinator', async (req, res) => {
                 desc: "Only SELECT queries are allowed"
             });
         }
+
+        //get name of the user
+        const query_get_name  = await executeQueryAuth(`SELECT name FROM coordinators WHERE username = '${function_call_username}';`);
+        console.log(query_get_name)
+
+        //Ensure query is filtered correctly
+        const prompt_filter = `Query = ${query}
+        Name = ${JSON.stringify(query_get_name[0].name)}
+        Hierarchy = Coordinator`
+        query = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER, AGENT_TOKEN_FILTER);
+
+        console.log(`New Query: ${query}`)
 
         // Step 2: Execute the SQL query
         let results = await executeQuery(query);
