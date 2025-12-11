@@ -292,6 +292,8 @@ app.post('/api/get_recommendation', async (req, res) => {
     try {
         const { graph, question, function_call_username } = req.body;
         let { query } = req.body;
+
+        console.log(req.body);
         //console.log(req.body);
         console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
