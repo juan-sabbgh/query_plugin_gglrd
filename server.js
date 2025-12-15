@@ -213,11 +213,12 @@ async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token)
     }
 }
 
-async function getChatSummaryDemo(query, db_result) {
+async function getChatSummaryDemo(query, db_result, question) {
     try {
         // Create a more informative prompt including the database results
         const prompt = `Original query: "${query}"
         Database results: ${JSON.stringify(db_result)}
+        User's question: ${question}
         
         Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
 
@@ -906,9 +907,9 @@ app.post('/api/get_recommendation_director', async (req, res) => {
 
 app.post('/api/get_recommendation_demo', async (req, res) => {
     try {
-        const { query, graph } = req.body;
+        const { query, graph, question } = req.body;
 
-        console.log(`Query: ${query} \nGraph: ${graph}`)
+        console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
 
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
@@ -924,6 +925,8 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 desc: "Please try another question"
             });
         }
+
+        console.log('Received query:', query);
 
         //Validate query, check if it doesnt include queries that can change the structure of the table
         const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
@@ -944,34 +947,53 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
         }
 
         // Step 2: Execute the SQL query
-        const results = await executeQuery(query);
+        let results = await executeQuery(query);
         console.log('Query results:', results);
 
+        if (!results || results.length === 0) {
+            //prepare prompt for the debug agent
+            prompt_debug = `SQL query: ${query} \n This query was done by a director. Give a personalized answer`
+            response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG)
+            return res.json({
+                markdown: "...",
+                type: "markdown",
+                //query debugging agent response
+                desc: response_debug
+            });
+        }
+        let chat_summary_new = "";
+        if (results.length > 100) {
+            console.log("Cut results for only 100 rows");
+            chat_summary_new = chat_summary_new + "\n**Note:** Only the first 100 records were analyzed out of a total of " + results.length + ".\n\n";
+            results = results.slice(0, 100);
+        }
         // Step 3: Get AI interpretation of the results
-        const chat_summary = await getChatSummaryDemo(query, results);
+        prompt_results = `User's question: "${question}"
+        SQL query performed: "${query}"
+        Database results: ${JSON.stringify(results)}
 
-        //Check whether a graph is necessary
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
+        const chat_summary = await getChatSummaryDemo(query, results, question);
+
+        //chat_summary_new = chat_summary.replace(/\$/g, "$");
+        chat_summary_new = chat_summary_new + chat_summary
+
+        console.log(chat_summary_new);
+
+
+        //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
         if (graph === "bar") {
-            // Maneja el caso de que no haya resultados
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "bar", type: "chart",
-                    dimension: null, desc: "No data found for the query."
-                });
-            }
-
-            // 1. Extrae los encabezados de los resultados
+            // 1. Get headers of the results
             const field_headers = Object.keys(results[0]);
 
-            // 2. La "dimensión" suele ser el primer encabezado (ej. la fecha)
+            // 2. Get dimension
             const dimension = field_headers[0];
 
-            // 3. Genera la tabla markdown usando la función auxiliar
+            // 3.Generate markdown table
             const markdownTable = generateMarkdownTable(results);
 
-            // 4. Construye y envía la respuesta en el formato deseado
+            // 4. Send response
             return res.json({
                 data: results,
                 raw: results,
@@ -980,17 +1002,10 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 chart_type: "bar",
                 type: "chart",
                 dimension: dimension,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
         else if (graph === "line") {
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "line", type: "chart",
-                    dimension: null, desc: "No data found for the query."
-                });
-            }
             const field_headers = Object.keys(results[0]);
             const dimension = field_headers[0];
             const markdownTable = generateMarkdownTable(results);
@@ -1003,20 +1018,10 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 chart_type: "line",
                 type: "chart",
                 dimension: dimension,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
         else if (graph === "pie") {
-            // Manejo de caso sin resultados
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "pie", type: "chart",
-                    dimension: null, metrics: null, // Añadido metrics: null para consistencia
-                    desc: "No data found for the query."
-                });
-            }
-
             const field_headers = Object.keys(results[0]);
 
             // Para un Pie Chart, la dimensión son las categorías (primera columna)
@@ -1038,29 +1043,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 type: "chart",
                 dimension: dimension,
                 metrics: metrics, // <-- CAMBIO CLAVE: Se añade el campo "metrics"
-                desc: chat_summary
-            });
-        }
-        else if (graph === "scatter") {
-            if (!results || results.length === 0) {
-                return res.json({
-                    data: [], raw: [], markdown: "No data.",
-                    field_headers: [], chart_type: "scatter", type: "chart",
-                    dimension: null, desc: "No data found for the query."
-                });
-            }
-            const field_headers = Object.keys(results[0]);
-            const markdownTable = generateMarkdownTable(results);
-
-            return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "scatter",
-                type: "chart",
-                dimension: null,
-                desc: chat_summary
+                desc: chat_summary_new
             });
         }
 
@@ -1075,7 +1058,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
             },
             markdown: markdownTable,
             type: "markdown",
-            desc: chat_summary
+            desc: chat_summary_new
         });
 
     } catch (error) {
@@ -1092,7 +1075,7 @@ app.post('/api/get_recommendation_demo', async (req, res) => {
                 },
                 markdown: "...",
                 type: "markdown",
-                desc: "Please try another question"
+                desc: "The query was not processed successfully"
             });
         } else if (error.message.includes('SQL syntax')) {
             return res.json({
