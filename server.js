@@ -203,12 +203,13 @@ async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token)
             },
             body: JSON.stringify(requestData)
         });
-
+        
         if (!response.ok) {
             throw new Error(`Error en la solicitud: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
+        console.log(data);
         return data.data.answer;
 
     } catch (error) {
@@ -732,9 +733,9 @@ app.post('/api/get_recommendation_director', async (req, res) => {
 
         //ENHANCE SQL QUERY AND REMOVE ```SQL  ``` FROM THE QUERY GENERATED
         const prompt_enhancer = `Query: ${query}
-        Question: ${question}
-        `;
-        let enhanced_query = await getChatSummaryGeneral(AS_ACCOUNT,prompt_enhancer,AGENT_KEY_ENHANCER,AGENT_TOKEN_ENHANCER);
+        Question: ${question}`;
+        let enhanced_query = query;
+        enhanced_query = await getChatSummaryGeneral(AS_ACCOUNT,prompt_enhancer,AGENT_KEY_ENHANCER,AGENT_TOKEN_ENHANCER);
         enhanced_query = enhanced_query.replace(/^```sql\s*/i, '').replace(/\s*```$/g, '').trim();
 
         console.log('Enhanced query:', enhanced_query);
