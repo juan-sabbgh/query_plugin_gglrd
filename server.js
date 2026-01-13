@@ -44,6 +44,10 @@ const AGENT_KEY_FIXER = process.env.AGENT_KEY_FIXER;
 const AGENT_TOKEN_FILTER = process.env.AGENT_TOKEN_FILTER;
 const AGENT_KEY_FILTER = process.env.AGENT_KEY_FILTER;
 
+//agent api parameters for the ENHANCER agent
+const AGENT_TOKEN_ENHANCER = process.env.AGENT_TOKEN_ENHANCER;
+const AGENT_KEY_ENHANCER = process.env.AGENT_KEY_ENHANCER;
+
 //database parameters
 const DB_HOST = process.env.DB_HOST;
 const DB_PORT = process.env.DB_PORT;
@@ -726,17 +730,24 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             });
         }
 
-        console.log('Received query:', query);
+        //ENHANCE SQL QUERY AND REMOVE ```SQL  ``` FROM THE QUERY GENERATED
+        const prompt_enhancer = `Query: ${query}
+        Question: ${question}
+        `;
+        let enhanced_query = getChatSummaryGeneral(AS_ACCOUNT,prompt_enhancer,AGENT_KEY_ENHANCER,AGENT_TOKEN_ENHANCER);
+        enhanced_query = enhanced_query.replace(/^```sql\s*/i, '').replace(/\s*```$/g, '').trim();
+
+        console.log('Enhanced query:', enhanced_query);
 
         //Validate query, check if it doesnt include queries that can change the structure of the table
         const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
 
-        if (forbiddenPattern.test(query)) {
+        if (forbiddenPattern.test(enhanced_query)) {
             console.log('Validation failed: Non-SELECT query detected.');
             return res.status(403).json({
                 raw: {
                     success: false,
-                    original_query: query,
+                    original_query: enhanced_query,
                     error: "Query type not allowed. Only SELECT statements are permitted.",
                     result: "The query was not processed successfully"
                 },
@@ -747,12 +758,12 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         }
 
         // Step 2: Execute the SQL query
-        let results = await executeQuery(query);
+        let results = await executeQuery(enhanced_query);
         console.log('Query results:', results);
 
         if (!results || results.length === 0) {
             //prepare prompt for the debug agent
-            prompt_debug = `SQL query: ${query} \n This query was done by a director. Give a personalized answer`
+            prompt_debug = `SQL query: ${enhanced_query} \n This query was done by a director. Give a personalized answer`
             response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG)
             return res.json({
                 markdown: "...",
@@ -762,14 +773,14 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             });
         }
         let chat_summary_new = "";
-        if (results.length > 50) {
-            console.log("Cut results for only 50 rows");
-            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 50 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0, 50);
+        if (results.length > 100) {
+            console.log("Cut results for only 100 rows");
+            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
+            results = results.slice(0, 100);
         }
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
-        SQL query performed: "${query}"
+        SQL query performed: "${enhanced_query}"
         Database results: ${JSON.stringify(results)}
 
         Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
@@ -852,7 +863,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         return res.json({
             raw: {
                 success: true,
-                original_query: query,
+                original_query: enhanced_query,
                 result_count: results.length,
                 result: "The query was processed successfully"
             },
@@ -869,7 +880,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             return res.json({
                 raw: {
                     success: false,
-                    original_query: query,
+                    original_query: enhanced_query,
                     error: error,
                     result: "The query was not processed successfully"
                 },
@@ -881,7 +892,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             return res.json({
                 raw: {
                     success: false,
-                    original_query: query,
+                    original_query: enhanced_query,
                     error: error,
                     result: "There was an issue with the generated query"
                 },
@@ -893,7 +904,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             return res.json({
                 raw: {
                     success: false,
-                    original_query: query,
+                    original_query: enhanced_query,
                     error: error,
                     result: "Something went wrong while processing your request"
                 },
