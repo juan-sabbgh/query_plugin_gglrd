@@ -734,7 +734,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         const prompt_enhancer = `Query: ${query}
         Question: ${question}
         `;
-        let enhanced_query = getChatSummaryGeneral(AS_ACCOUNT,prompt_enhancer,AGENT_KEY_ENHANCER,AGENT_TOKEN_ENHANCER);
+        let enhanced_query = await getChatSummaryGeneral(AS_ACCOUNT,prompt_enhancer,AGENT_KEY_ENHANCER,AGENT_TOKEN_ENHANCER);
         enhanced_query = enhanced_query.replace(/^```sql\s*/i, '').replace(/\s*```$/g, '').trim();
 
         console.log('Enhanced query:', enhanced_query);
