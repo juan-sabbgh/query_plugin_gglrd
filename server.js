@@ -762,10 +762,10 @@ app.post('/api/get_recommendation_director', async (req, res) => {
             });
         }
         let chat_summary_new = "";
-        if (results.length > 100) {
-            console.log("Cut results for only 100 rows");
-            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0, 100);
+        if (results.length > 50) {
+            console.log("Cut results for only 50 rows");
+            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 50 registros foram analisados de um total de " + results.length + ".\n\n";
+            results = results.slice(0, 50);
         }
         // Step 3: Get AI interpretation of the results
         prompt_results = `User's question: "${question}"
