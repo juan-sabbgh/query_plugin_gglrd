@@ -209,7 +209,7 @@ async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token)
         }
 
         const data = await response.json();
-        //console.log(data);
+        console.log(data);
         return data.data.answer;
 
     } catch (error) {
