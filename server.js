@@ -292,6 +292,19 @@ async function getChatSummary(query, db_result, user_question) {
     }
 }
 
+// Utility function — place this outside the endpoint
+function capFloatsToTwoDecimals(rows) {
+    return rows.map(row => {
+        const newRow = {};
+        for (const [key, value] of Object.entries(row)) {
+            newRow[key] = typeof value === 'number' && !Number.isInteger(value)
+                ? Math.round(value * 100) / 100
+                : value;
+        }
+        return newRow;
+    });
+}
+
 app.use(express.json());
 
 app.post('/api/get_recommendation', async (req, res) => {
@@ -352,6 +365,11 @@ app.post('/api/get_recommendation', async (req, res) => {
         // Step 2: Execute the SQL query
         let results = await executeQuery(query);
         console.log('Query results:', results);
+
+        // Cap float values to 2 decimal places
+        if (results && results.length > 0) {
+            results = capFloatsToTwoDecimals(results);
+        }
 
         if (!results || results.length === 0) {
             //prepare prompt for the debug agent
