@@ -343,9 +343,9 @@ app.post('/api/get_recommendation', async (req, res) => {
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
-        const prompt_filter = `Query = ${query}
-        Name = ${JSON.stringify(query_get_name[0].name)}
-        Hierarchy = Consultant`
+        const prompt_filter = `What the user asked = ${question}
+        Draft SQL Query = ${query}
+        User credential = ${JSON.stringify(query_get_name[0].name)} - Consultant`
         query = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER, AGENT_TOKEN_FILTER);
 
         console.log(`New Query: ${query}`)
