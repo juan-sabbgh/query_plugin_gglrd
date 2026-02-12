@@ -352,13 +352,24 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         //get name of the user
-        const query_get_name = await executeQueryAuth(`SELECT name FROM consultants WHERE username = '${function_call_username}';`);
+        /*const query_get_name = await executeQueryAuth(`SELECT name FROM consultants WHERE username = '${function_call_username}';`);
         console.log(query_get_name)
 
         //Ensure query is filtered correctly
         const prompt_filter = `What the user asked = ${question}
         Draft SQL Query = ${query}
-        User credential = ${JSON.stringify(query_get_name[0].name)} - Consultant`
+        User credential = ${JSON.stringify(query_get_name[0].name)} - Consultant`*/
+
+
+        //======TESTING
+        const query_get_name = "CARLOS EDUARDO DE SOUZA HOLANDA";
+
+        //Ensure query is filtered correctly
+        const prompt_filter = `What the user asked = ${question}
+        Draft SQL Query = ${query}
+        User credential = ${query_get_name} - Consultant`;
+        //=======END TEST
+
         query = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER, AGENT_TOKEN_FILTER);
 
         console.log(`New Query: ${query}`)
