@@ -1165,7 +1165,7 @@ app.post('/api/auth/consultant', async (req, res) => {
             return res.json({
                 success: true,
                 message: `User ${name} logged in successfully`,
-                result: result
+                result: result[0]["Consultant Name"]
             })
         }
         else {
