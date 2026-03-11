@@ -187,6 +187,15 @@ function generateMarkdownTable(data) {
     return `${headerRow}\n${separatorRow}\n${bodyRows}`;
 }
 
+// Utility function — checks if any cell in the results has more than maxLength characters
+function hasLongCellValue(rows, maxLength = 80) {
+    return rows.some(row =>
+        Object.values(row).some(value =>
+            typeof value === 'string' && value.length > maxLength
+        )
+    );
+}
+
 async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token) {
     try {
         const requestData = {
@@ -395,6 +404,9 @@ app.post('/api/get_recommendation', async (req, res) => {
         const chat_summary = await getChatSummary(query, results, question);
         chat_summary_new = chat_summary_new + chat_summary
 
+        // Check if any cell value exceeds 80 characters — if so, skip the markdown table
+        const longCellDetected = hasLongCellValue(results);
+
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
         if (graph === "bar") {
@@ -403,6 +415,14 @@ app.post('/api/get_recommendation', async (req, res) => {
 
             // 2. Get dimension
             const dimension = field_headers[0];
+
+            if (longCellDetected) {
+                return res.json({
+                    markdown: "...",
+                    type: "markdown",
+                    desc: chat_summary_new
+                });
+            }
 
             // 3.Generate markdown table
             const markdownTable = generateMarkdownTable(results);
@@ -422,6 +442,15 @@ app.post('/api/get_recommendation', async (req, res) => {
         else if (graph === "line") {
             const field_headers = Object.keys(results[0]);
             const dimension = field_headers[0];
+
+            if (longCellDetected) {
+                return res.json({
+                    markdown: "...",
+                    type: "markdown",
+                    desc: chat_summary_new
+                });
+            }
+
             const markdownTable = generateMarkdownTable(results);
 
             return res.json({
@@ -445,6 +474,14 @@ app.post('/api/get_recommendation', async (req, res) => {
             // Nos aseguramos de que haya al menos 2 columnas para evitar errores.
             const metrics = field_headers.length > 1 ? field_headers[1] : null;
 
+            if (longCellDetected) {
+                return res.json({
+                    markdown: "...",
+                    type: "markdown",
+                    desc: chat_summary_new
+                });
+            }
+
             const markdownTable = generateMarkdownTable(results);
 
             // Se construye la respuesta incluyendo el nuevo campo "metrics"
@@ -462,6 +499,20 @@ app.post('/api/get_recommendation', async (req, res) => {
         }
 
         // Step 4: Return the response
+        if (longCellDetected) {
+            return res.json({
+                raw: {
+                    success: true,
+                    original_query: query,
+                    result_count: results.length,
+                    result: "The query was processed successfully"
+                },
+                markdown: "...",
+                type: "markdown",
+                desc: chat_summary_new
+            });
+        }
+
         const markdownTable = generateMarkdownTable(results);
         return res.json({
             raw: {
