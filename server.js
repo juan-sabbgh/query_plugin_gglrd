@@ -521,7 +521,8 @@ app.post('/api/get_recommendation', async (req, res) => {
                 result_count: results.length,
                 result: "The query was processed successfully"
             },
-            markdown: markdownTable,
+            //markdown: markdownTable,
+            markdown: "...",
             type: "markdown",
             desc: chat_summary_new
         });
