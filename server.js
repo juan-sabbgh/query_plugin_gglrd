@@ -407,6 +407,10 @@ app.post('/api/get_recommendation', async (req, res) => {
         // Check if any cell value exceeds 80 characters — if so, skip the markdown table
         const longCellDetected = hasLongCellValue(results);
 
+        // Check if the result is a single scalar value (one row, one column)
+        // A chart is meaningless for scalar results like [ { total_revenue: 1727866.8 } ]
+        const isSingleScalar = results.length === 1 && Object.keys(results[0]).length === 1;
+
         //Check wether a graph is necessary
         // Verifica si se necesita un gráfico
         if (graph === "bar") {
@@ -416,7 +420,7 @@ app.post('/api/get_recommendation', async (req, res) => {
             // 2. Get dimension
             const dimension = field_headers[0];
 
-            if (longCellDetected) {
+            if (longCellDetected || isSingleScalar) {
                 return res.json({
                     markdown: "...",
                     type: "markdown",
@@ -443,7 +447,7 @@ app.post('/api/get_recommendation', async (req, res) => {
             const field_headers = Object.keys(results[0]);
             const dimension = field_headers[0];
 
-            if (longCellDetected) {
+            if (longCellDetected || isSingleScalar) {
                 return res.json({
                     markdown: "...",
                     type: "markdown",
@@ -474,7 +478,7 @@ app.post('/api/get_recommendation', async (req, res) => {
             // Nos aseguramos de que haya al menos 2 columnas para evitar errores.
             const metrics = field_headers.length > 1 ? field_headers[1] : null;
 
-            if (longCellDetected) {
+            if (longCellDetected || isSingleScalar) {
                 return res.json({
                     markdown: "...",
                     type: "markdown",
