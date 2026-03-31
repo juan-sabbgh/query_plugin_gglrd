@@ -212,7 +212,7 @@ async function getChatSummaryGeneral(as_account, prompt, agent_key, agent_token)
             },
             body: JSON.stringify(requestData)
         });
-        
+
         if (!response.ok) {
             throw new Error(`Error en la solicitud: ${response.status} ${response.statusText}`);
         }
@@ -812,7 +812,7 @@ app.post('/api/get_recommendation_director', async (req, res) => {
         const prompt_enhancer = `Query: ${query}
         Question: ${question}`;
         let enhanced_query = query;
-        enhanced_query = await getChatSummaryGeneral(AS_ACCOUNT,prompt_enhancer,AGENT_KEY_ENHANCER,AGENT_TOKEN_ENHANCER);
+        enhanced_query = await getChatSummaryGeneral(AS_ACCOUNT, prompt_enhancer, AGENT_KEY_ENHANCER, AGENT_TOKEN_ENHANCER);
         enhanced_query = enhanced_query.replace(/^```sql\s*/i, '').replace(/\s*```$/g, '').trim();
 
         console.log('Enhanced query:', enhanced_query);
@@ -1198,7 +1198,12 @@ app.post('/api/auth/consultant', async (req, res) => {
     try {
         const { name, password } = req.body;
         console.log(req.body);
-        const sqlQuery = `SELECT "Consultant Name" FROM consultants_passwords WHERE "Consultant Name" ILIKE '%${name}%' AND passwords = '${password}';`;
+        const sqlQuery = `
+  SELECT "Consultant Name" 
+  FROM consultants_passwords 
+  WHERE unaccent("Consultant Name") ILIKE unaccent('%${name}%') 
+  AND passwords = '${password}';
+`;
         //console.log(`Query to execute for login`);
         const result = await executeQueryAuth(sqlQuery);
 
@@ -1373,7 +1378,11 @@ app.post('/api/auth/consultant/search', async (req, res) => {
             });
         }
 
-        const sqlQuery = `SELECT DISTINCT "Consultant Name" FROM consultants_passwords WHERE "Consultant Name" ILIKE '%${name}%';`;
+        const sqlQuery = `
+  SELECT DISTINCT "Consultant Name" 
+  FROM consultants_passwords 
+  WHERE unaccent("Consultant Name") ILIKE unaccent('%${name}%');
+`;
         const result = await executeQueryAuth(sqlQuery);
 
         if (result.length === 0) {
