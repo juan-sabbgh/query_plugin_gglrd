@@ -48,6 +48,10 @@ const AGENT_KEY_FILTER = process.env.AGENT_KEY_FILTER;
 const AGENT_TOKEN_ENHANCER = process.env.AGENT_TOKEN_ENHANCER;
 const AGENT_KEY_ENHANCER = process.env.AGENT_KEY_ENHANCER;
 
+//agent api parameters for the SPLITTER agent
+const AGENT_TOKEN_SPLITTER = process.env.AGENT_TOKEN_SPLITTER;
+const AGENT_KEY_SPLITTER = process.env.AGENT_KEY_SPLITTER;
+
 //database parameters
 const DB_HOST = process.env.DB_HOST;
 const DB_PORT = process.env.DB_PORT;
@@ -301,6 +305,75 @@ async function getChatSummary(query, db_result, user_question) {
     }
 }
 
+// Splits a potentially multi-part question into an array of { question, query, is_chart_target } objects.
+// Returns a single-element array when the message contains only one question.
+// graph: the requested chart type ("bar", "line", "pie", "scatter", "none") — used to decide which
+// sub-question's result is best suited for rendering as that chart.
+async function splitQuestion(question, query, graph) {
+    const prompt = `You are analyzing a sales data request for Grupo Gagliardi, a lubricants and tires distributor in Brazil.
+
+## Database schema (PostgreSQL)
+
+Table "mytable" (sales/invoice data):
+- "Invoice Issue Date" (DATE), "Customer Code" (VARCHAR), "Customer Name" (VARCHAR),
+  "Customer Classification" (VARCHAR), "Consultant Code" (VARCHAR), "Consultant Name" (VARCHAR),
+  "Branch Name" (VARCHAR), "Item Number" (VARCHAR), "Item Description" (VARCHAR),
+  "Quantity" (INTEGER), "Volume" (NUMERIC), "Unit Price" (NUMERIC),
+  "Line Total" (NUMERIC), "Document Total" (NUMERIC), "Distributor" (VARCHAR), "Coordinator" (VARCHAR)
+
+Table "smart_swap_clients" (client & inactivity data):
+- "customer_code" (VARCHAR), "customer_name" (VARCHAR), "client_segment" (VARCHAR),
+  "consultant_name" (VARCHAR), "days_inactive" (INTEGER), "tank_product_code" (VARCHAR),
+  "tank_product_name" (VARCHAR), "tank_capacity_liters" (INTEGER)
+
+Table "product_recommendations" (product catalog per segment):
+- "client_segment" (VARCHAR), "product_code" (VARCHAR), "recommended_product_name" (VARCHAR), "product_lob" (VARCHAR)
+
+## SQL rules
+- ALL column names MUST be enclosed in double quotes (e.g. "Item Description", "Invoice Issue Date")
+- Only SELECT statements are allowed
+- Default to LIMIT 10 unless the question specifies a different number
+- Use ILIKE '%term%' for text search on names and descriptions
+- Brand detection via "Item Description": Mobil → ILIKE '%Mobil%', Tirreno → ILIKE '%Tirreno%', Pirelli → ILIKE '%Pirelli%', Arla → ILIKE '%Arla%'
+
+## Date rules
+The database contains data only up to September 2025. All relative date references must be interpreted relative to September 2025, not today:
+- "últimos 6 meses" → April 2025 – September 2025
+- "este mês" → September 2025
+- "este ano" → January 2025 – September 2025
+- "último trimestre" → July–September 2025
+- "mês passado" → August 2025
+
+## Task
+
+User's message: "${question}"
+SQL query already generated for this message: "${query}"
+Requested chart type: "${graph}"
+
+Analyze if the user's message contains multiple independent data requests.
+
+- If it contains ONLY ONE request: return a single-element array, reusing the provided SQL query unchanged.
+- If it contains MULTIPLE independent requests: split them and generate a valid PostgreSQL SELECT query for each one. For the sub-question that is best covered by the provided SQL, reuse it unchanged — do not regenerate it.
+
+## is_chart_target rules (mark true on AT MOST ONE object)
+- "bar": suitable when the result has multiple rows, first column is a category/name, remaining columns are numeric (e.g. top clients by revenue, products by volume)
+- "line": suitable when the result is a time series (first column is a date or period, remaining columns are numeric metrics)
+- "pie": suitable for proportional breakdowns with 2–6 categories
+- "none": set is_chart_target to false on ALL objects
+- If the sub-question's result would be a single scalar value (one row, one column), it is NOT suitable — do not mark it as chart target
+- Mark is_chart_target true on the sub-question whose result set is most suitable for a "${graph}" chart. If no sub-question is suitable, set all to false.
+
+Return ONLY a valid JSON array — no explanation, no markdown:
+[
+  { "question": "sub-question in Portuguese", "query": "SELECT ...", "is_chart_target": true },
+  { "question": "sub-question in Portuguese", "query": "SELECT ...", "is_chart_target": false }
+]`;
+
+    const raw = await getChatSummaryGeneral(AS_ACCOUNT, prompt, AGENT_KEY_SPLITTER, AGENT_TOKEN_SPLITTER);
+    const cleaned = raw.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
+}
+
 // Utility function — place this outside the endpoint
 function capFloatsToTwoDecimals(rows) {
     return rows.map(row => {
@@ -317,259 +390,232 @@ function capFloatsToTwoDecimals(rows) {
 app.use(express.json());
 
 app.post('/api/get_recommendation', async (req, res) => {
+    const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
+    let originalQuery = '';
+
     try {
         const { graph, question, function_call_username } = req.body;
         let { query } = req.body;
+        originalQuery = query;
 
         console.log(req.body);
-        //console.log(req.body);
-        console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
+        console.log(`Query: ${query} \nGraph: ${graph} \nQuestion: ${question}`);
 
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: "Invalid or empty query provided.",
-                    result: "The query was not processed successfully"
-                },
+                raw: { success: false, original_query: query, error: "Invalid or empty query provided.", result: "The query was not processed successfully" },
                 markdown: "The query is invalid. Please try another question.",
                 type: "markdown",
                 desc: "Please try another question"
             });
         }
 
-        console.log('Received query:', query);
-
-        //Validate query, check if it doesnt include queries that can change the structure of the table
-        const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
-
         if (forbiddenPattern.test(query)) {
-            console.log('Validation failed: Non-SELECT query detected.');
             return res.status(403).json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: "Query type not allowed. Only SELECT statements are permitted.",
-                    result: "The query was not processed successfully"
-                },
+                raw: { success: false, original_query: query, error: "Query type not allowed. Only SELECT statements are permitted.", result: "The query was not processed successfully" },
                 markdown: "### 🚫 Query Blocked\nYour query was blocked because it is not a `SELECT` statement. Operations like `INSERT`, `UPDATE`, `DROP`, etc., are not allowed.",
                 type: "markdown",
                 desc: "Only SELECT queries are allowed"
             });
         }
 
-        //get name of the user
+        // Get consultant name
         const query_get_name = await executeQueryAuth(`SELECT name FROM consultants WHERE username = '${function_call_username}';`);
-        console.log(query_get_name)
+        const consultantName = query_get_name[0].name;
+        console.log('Consultant:', consultantName);
 
-        //Ensure query is filtered correctly
-        const prompt_filter = `What the user asked = ${question}
-        Draft SQL Query = ${query}
-        User credential = ${JSON.stringify(query_get_name[0].name)} - Consultant`
+        // Step 1: Split message into sub-questions (returns [{question, query, is_chart_target}])
+        const subQuestions = await splitQuestion(question, query, graph);
+        const isMultiple = subQuestions.length > 1;
+        console.log(`Sub-questions (${subQuestions.length}):`, subQuestions.map(s => s.question));
 
-        query = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER, AGENT_TOKEN_FILTER);
+        // Step 2: Filter + execute each sub-question in parallel
+        const subResults = await Promise.all(
+            subQuestions.map(async ({ question: subQ, query: subSql, is_chart_target }) => {
+                const prompt_filter = `What the user asked = ${subQ}
+        Draft SQL Query = ${subSql}
+        User credential = ${JSON.stringify(consultantName)} - Consultant`;
 
-        query = query.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '').trim();
+                let filteredQuery = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER, AGENT_TOKEN_FILTER);
+                filteredQuery = filteredQuery.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '').trim();
+                console.log(`Filtered query for "${subQ}":`, filteredQuery);
 
-        console.log(`New Query: ${query}`)
-        // Step 2: Execute the SQL query
-        let results = await executeQuery(query);
-        console.log('Query results:', results);
+                if (forbiddenPattern.test(filteredQuery)) {
+                    console.warn(`Blocked query for sub-question: "${subQ}"`);
+                    return { question: subQ, query: filteredQuery, results: [], blocked: true, is_chart_target };
+                }
 
-        // Cap float values to 2 decimal places
-        if (results && results.length > 0) {
-            results = capFloatsToTwoDecimals(results);
+                let results = await executeQuery(filteredQuery);
+
+                if (results && results.length > 0) {
+                    results = capFloatsToTwoDecimals(results);
+                    if (results.length > 100) {
+                        console.log(`Trimming results for "${subQ}" from ${results.length} to 100`);
+                        results = results.slice(0, 100);
+                    }
+                }
+
+                return { question: subQ, query: filteredQuery, results: results || [], is_chart_target };
+            })
+        );
+
+        // Step 3: Handle case where all sub-queries returned no data
+        const hasAnyResults = subResults.some(sr => sr.results.length > 0);
+        if (!hasAnyResults) {
+            const prompt_debug = `SQL queries performed: ${subResults.map(sr => sr.query).join(' | ')} \nThis was done by a consultant. Give a personalized answer, the results were filtered by their consultant code.`;
+            const response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG);
+            return res.json({ markdown: "...", type: "markdown", desc: response_debug });
         }
 
-        if (!results || results.length === 0) {
-            //prepare prompt for the debug agent
-            prompt_debug = `SQL query: ${query} \n This query was done by a consultant. Give a personalized answer, the results were filtered by their consultant code`
-            response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG)
+        // Step 4: Build summary prompt and call analysis agent
+        let chat_summary_prefix = "";
+
+        const nonEmptyResults = subResults.filter(sr => sr.results.length > 0);
+
+        // Note if some sub-queries had large result sets (already trimmed above)
+        subResults.forEach(sr => {
+            if (sr.results.length === 100) {
+                chat_summary_prefix += `\n**Nota:** Apenas os primeiros 100 registros foram analisados para "${sr.question}".\n\n`;
+            }
+        });
+
+        let promptForSummary;
+        if (isMultiple) {
+            promptForSummary = `User's original message: "${question}"\n\n` +
+                nonEmptyResults.map((sr, i) =>
+                    `Question ${i + 1}: "${sr.question}"\nSQL: "${sr.query}"\nResults: ${JSON.stringify(sr.results)}`
+                ).join('\n\n') +
+                '\n\nGive a comprehensive answer addressing all questions with a natural language interpretation of the results.';
+        } else {
+            promptForSummary = `User's question: "${question}"
+        SQL query performed: "${nonEmptyResults[0].query}"
+        Database results: ${JSON.stringify(nonEmptyResults[0].results)}
+
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
+        }
+
+        const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, promptForSummary, AGENT_KEY, AGENT_TOKEN);
+        const chat_summary_final = chat_summary_prefix + chat_summary;
+
+        // Step 5: Build response
+        if (isMultiple) {
+            // Find the sub-result designated for charting (if any and if it has usable data)
+            const chartTarget = nonEmptyResults.find(sr =>
+                sr.is_chart_target &&
+                sr.results.length > 0 &&
+                !hasLongCellValue(sr.results) &&
+                !(sr.results.length === 1 && Object.keys(sr.results[0]).length === 1) // not a scalar
+            );
+
+            if (graph !== "none" && chartTarget && ["bar", "line", "pie"].includes(graph)) {
+                const field_headers = Object.keys(chartTarget.results[0]);
+                const dimension = field_headers[0];
+                const chartResponse = {
+                    data: chartTarget.results,
+                    raw: nonEmptyResults.map(sr => ({ question: sr.question, result_count: sr.results.length, results: sr.results })),
+                    markdown: generateMarkdownTable(chartTarget.results),
+                    field_headers,
+                    chart_type: graph,
+                    type: "chart",
+                    dimension,
+                    desc: chat_summary_final
+                };
+                if (graph === "pie") {
+                    chartResponse.metrics = field_headers.length > 1 ? field_headers[1] : null;
+                }
+                return res.json(chartResponse);
+            }
+
+            // No suitable chart target — return markdown
             return res.json({
+                raw: nonEmptyResults.map(sr => ({ question: sr.question, result_count: sr.results.length, results: sr.results })),
                 markdown: "...",
                 type: "markdown",
-                //query debugging agent response
-                desc: response_debug
+                desc: chat_summary_final
             });
         }
-        let chat_summary_new = "";
-        if (results.length > 100) {
-            console.log("Cut results for only 100 rows");
-            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0, 100);
-        }
-        // Step 3: Get AI interpretation of the results
-        const chat_summary = await getChatSummary(query, results, question);
-        chat_summary_new = chat_summary_new + chat_summary
 
-        // Check if any cell value exceeds 80 characters — if so, skip the markdown table
+        // Single sub-question: existing chart / markdown logic
+        const results = nonEmptyResults[0].results;
+        const finalQuery = nonEmptyResults[0].query;
         const longCellDetected = hasLongCellValue(results);
-
-        // Check if the result is a single scalar value (one row, one column)
-        // A chart is meaningless for scalar results like [ { total_revenue: 1727866.8 } ]
         const isSingleScalar = results.length === 1 && Object.keys(results[0]).length === 1;
 
-        //Check wether a graph is necessary
-        // Verifica si se necesita un gráfico
         if (graph === "bar") {
-            // 1. Get headers of the results
-            const field_headers = Object.keys(results[0]);
-
-            // 2. Get dimension
-            const dimension = field_headers[0];
-
-            if (longCellDetected || isSingleScalar) {
-                return res.json({
-                    markdown: "...",
-                    type: "markdown",
-                    desc: chat_summary_new
-                });
-            }
-
-            // 3.Generate markdown table
-            const markdownTable = generateMarkdownTable(results);
-
-            // 4. Send response
-            return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "bar",
-                type: "chart",
-                dimension: dimension,
-                desc: chat_summary_new
-            });
-        }
-        else if (graph === "line") {
             const field_headers = Object.keys(results[0]);
             const dimension = field_headers[0];
 
             if (longCellDetected || isSingleScalar) {
-                return res.json({
-                    markdown: "...",
-                    type: "markdown",
-                    desc: chat_summary_new
-                });
+                return res.json({ markdown: "...", type: "markdown", desc: chat_summary_final });
             }
 
-            const markdownTable = generateMarkdownTable(results);
-
             return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "line",
-                type: "chart",
-                dimension: dimension,
-                desc: chat_summary_new
+                data: results, raw: results,
+                markdown: generateMarkdownTable(results),
+                field_headers, chart_type: "bar", type: "chart",
+                dimension, desc: chat_summary_final
             });
-        }
-        else if (graph === "pie") {
+        } else if (graph === "line") {
             const field_headers = Object.keys(results[0]);
-
-            // Para un Pie Chart, la dimensión son las categorías (primera columna)
             const dimension = field_headers[0];
 
-            // La métrica es el valor numérico (segunda columna) que define el tamaño de las rebanadas.
-            // Nos aseguramos de que haya al menos 2 columnas para evitar errores.
+            if (longCellDetected || isSingleScalar) {
+                return res.json({ markdown: "...", type: "markdown", desc: chat_summary_final });
+            }
+
+            return res.json({
+                data: results, raw: results,
+                markdown: generateMarkdownTable(results),
+                field_headers, chart_type: "line", type: "chart",
+                dimension, desc: chat_summary_final
+            });
+        } else if (graph === "pie") {
+            const field_headers = Object.keys(results[0]);
+            const dimension = field_headers[0];
             const metrics = field_headers.length > 1 ? field_headers[1] : null;
 
             if (longCellDetected || isSingleScalar) {
-                return res.json({
-                    markdown: "...",
-                    type: "markdown",
-                    desc: chat_summary_new
-                });
+                return res.json({ markdown: "...", type: "markdown", desc: chat_summary_final });
             }
 
-            const markdownTable = generateMarkdownTable(results);
-
-            // Se construye la respuesta incluyendo el nuevo campo "metrics"
             return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "pie",
-                type: "chart",
-                dimension: dimension,
-                metrics: metrics, // <-- CAMBIO CLAVE: Se añade el campo "metrics"
-                desc: chat_summary_new
+                data: results, raw: results,
+                markdown: generateMarkdownTable(results),
+                field_headers, chart_type: "pie", type: "chart",
+                dimension, metrics, desc: chat_summary_final
             });
         }
 
-        // Step 4: Return the response
         if (longCellDetected) {
             return res.json({
-                raw: {
-                    success: true,
-                    original_query: query,
-                    result_count: results.length,
-                    result: "The query was processed successfully"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: chat_summary_new
+                raw: { success: true, original_query: finalQuery, result_count: results.length, result: "The query was processed successfully" },
+                markdown: "...", type: "markdown", desc: chat_summary_final
             });
         }
 
-        const markdownTable = generateMarkdownTable(results);
         return res.json({
-            raw: {
-                success: true,
-                original_query: query,
-                result_count: results.length,
-                result: "The query was processed successfully"
-            },
-            //markdown: markdownTable,
-            markdown: "...",
-            type: "markdown",
-            desc: chat_summary_new
+            raw: { success: true, original_query: finalQuery, result_count: results.length, result: "The query was processed successfully" },
+            markdown: "...", type: "markdown", desc: chat_summary_final
         });
 
     } catch (error) {
         console.error('Error in /api/get_recommendation:', error);
 
-        // Provide helpful error messages based on the type of error
         if (error.message.includes('convert query to SQL')) {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: error,
-                    result: "The query was not processed successfully"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: "Por favor, tente outra pergunta"
+                raw: { success: false, original_query: originalQuery, error: error, result: "The query was not processed successfully" },
+                markdown: "...", type: "markdown", desc: "Por favor, tente outra pergunta"
             });
         } else if (error.message.includes('SQL syntax')) {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: error,
-                    result: "There was an issue with the generated query"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: "Houve um problema com a consulta gerada"
+                raw: { success: false, original_query: originalQuery, error: error, result: "There was an issue with the generated query" },
+                markdown: "...", type: "markdown", desc: "Houve um problema com a consulta gerada"
             });
         } else {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: error,
-                    result: "Something went wrong while processing your request"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: "Algo deu errado ao processar sua solicitação"
+                raw: { success: false, original_query: originalQuery, error: error, result: "Something went wrong while processing your request" },
+                markdown: "...", type: "markdown", desc: "Algo deu errado ao processar sua solicitação"
             });
         }
     }
