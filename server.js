@@ -40,9 +40,13 @@ const AGENT_KEY_DEBUG = process.env.AGENT_KEY_DEBUG;
 const AGENT_TOKEN_FIXER = process.env.AGENT_TOKEN_FIXER;
 const AGENT_KEY_FIXER = process.env.AGENT_KEY_FIXER;
 
-//agent api parameters for the filter agent
+//agent api parameters for the filter agent (consultant)
 const AGENT_TOKEN_FILTER = process.env.AGENT_TOKEN_FILTER;
 const AGENT_KEY_FILTER = process.env.AGENT_KEY_FILTER;
+
+//agent api parameters for the filter agent (coordinator)
+const AGENT_TOKEN_FILTER_COORD = process.env.AGENT_TOKEN_FILTER_COORD;
+const AGENT_KEY_FILTER_COORD = process.env.AGENT_KEY_FILTER_COORD;
 
 //agent api parameters for the ENHANCER agent
 const AGENT_TOKEN_ENHANCER = process.env.AGENT_TOKEN_ENHANCER;
@@ -622,212 +626,229 @@ app.post('/api/get_recommendation', async (req, res) => {
 });
 
 app.post('/api/get_recommendation_coordinator', async (req, res) => {
+    const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
+    let originalQuery = '';
+
     try {
         const { graph, question, function_call_username } = req.body;
         let { query } = req.body;
-        //console.log(req.body);
-        console.log(`Query: ${query} \nGraph: ${graph} \nQuestion ${question}`)
+        originalQuery = query;
+
+        console.log(req.body);
+        console.log(`Query: ${query} \nGraph: ${graph} \nQuestion: ${question}`);
 
         // Input validation
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: "Invalid or empty query provided.",
-                    result: "The query was not processed successfully"
-                },
+                raw: { success: false, original_query: query, error: "Invalid or empty query provided.", result: "The query was not processed successfully" },
                 markdown: "The query is invalid. Please try another question.",
                 type: "markdown",
                 desc: "Please try another question"
             });
         }
 
-        console.log('Received query:', query);
-
-        //Validate query, check if it doesnt include queries that can change the structure of the table
-        const forbiddenPattern = /\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
-
         if (forbiddenPattern.test(query)) {
-            console.log('Validation failed: Non-SELECT query detected.');
             return res.status(403).json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: "Query type not allowed. Only SELECT statements are permitted.",
-                    result: "The query was not processed successfully"
-                },
+                raw: { success: false, original_query: query, error: "Query type not allowed. Only SELECT statements are permitted.", result: "The query was not processed successfully" },
                 markdown: "### 🚫 Query Blocked\nYour query was blocked because it is not a `SELECT` statement. Operations like `INSERT`, `UPDATE`, `DROP`, etc., are not allowed.",
                 type: "markdown",
                 desc: "Only SELECT queries are allowed"
             });
         }
 
-        //get name of the user
+        // Get coordinator name
         const query_get_name = await executeQueryAuth(`SELECT name FROM coordinators WHERE username = '${function_call_username}';`);
-        console.log(query_get_name)
+        const coordinatorName = query_get_name[0].name;
+        console.log('Coordinator:', coordinatorName);
 
-        //Ensure query is filtered correctly
-        const prompt_filter = `Query = ${query}
-        Name = ${JSON.stringify(query_get_name[0].name)}
-        Hierarchy = Coordinator`
-        query = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER, AGENT_TOKEN_FILTER);
+        // Step 1: Split message into sub-questions (returns [{question, query, is_chart_target}])
+        const subQuestions = await splitQuestion(question, query, graph);
+        const isMultiple = subQuestions.length > 1;
+        console.log(`Sub-questions (${subQuestions.length}):`, subQuestions.map(s => s.question));
 
-        console.log(`New Query: ${query}`)
+        // Step 2: Filter + execute each sub-question in parallel
+        const subResults = await Promise.all(
+            subQuestions.map(async ({ question: subQ, query: subSql, is_chart_target }) => {
+                const prompt_filter = `Query = ${subSql}
+        Name = ${JSON.stringify(coordinatorName)}
+        Hierarchy = Coordinator`;
 
-        // Step 2: Execute the SQL query
-        let results = await executeQuery(query);
-        console.log('Query results:', results);
+                let filteredQuery = await getChatSummaryGeneral(AS_ACCOUNT, prompt_filter, AGENT_KEY_FILTER_COORD, AGENT_TOKEN_FILTER_COORD);
+                filteredQuery = filteredQuery.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '').trim();
+                console.log(`Filtered query for "${subQ}":`, filteredQuery);
 
-        if (!results || results.length === 0) {
-            //prepare prompt for the debug agent
-            prompt_debug = `SQL query: ${query} \n This query was done by a coordinator. Give a personalized answer, the results were filtered by their coordinator name`
-            response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG)
+                if (forbiddenPattern.test(filteredQuery)) {
+                    console.warn(`Blocked query for sub-question: "${subQ}"`);
+                    return { question: subQ, query: filteredQuery, results: [], blocked: true, is_chart_target };
+                }
+
+                let results = await executeQuery(filteredQuery);
+
+                if (results && results.length > 0) {
+                    results = capFloatsToTwoDecimals(results);
+                    if (results.length > 100) {
+                        console.log(`Trimming results for "${subQ}" from ${results.length} to 100`);
+                        results = results.slice(0, 100);
+                    }
+                }
+
+                return { question: subQ, query: filteredQuery, results: results || [], is_chart_target };
+            })
+        );
+
+        // Step 3: Handle case where all sub-queries returned no data
+        const hasAnyResults = subResults.some(sr => sr.results.length > 0);
+        if (!hasAnyResults) {
+            const prompt_debug = `SQL queries performed: ${subResults.map(sr => sr.query).join(' | ')} \nThis was done by a coordinator. Give a personalized answer, the results were filtered by their coordinator name.`;
+            const response_debug = await getChatSummaryGeneral(AS_ACCOUNT, prompt_debug, AGENT_KEY_DEBUG, AGENT_TOKEN_DEBUG);
+            return res.json({ markdown: "...", type: "markdown", desc: response_debug });
+        }
+
+        // Step 4: Build summary prompt and call coordinator analysis agent
+        let chat_summary_prefix = "";
+        const nonEmptyResults = subResults.filter(sr => sr.results.length > 0);
+
+        subResults.forEach(sr => {
+            if (sr.results.length === 100) {
+                chat_summary_prefix += `\n**Nota:** Apenas os primeiros 100 registros foram analisados para "${sr.question}".\n\n`;
+            }
+        });
+
+        let promptForSummary;
+        if (isMultiple) {
+            promptForSummary = `User's original message: "${question}"\n\n` +
+                nonEmptyResults.map((sr, i) =>
+                    `Question ${i + 1}: "${sr.question}"\nSQL: "${sr.query}"\nResults: ${JSON.stringify(sr.results)}`
+                ).join('\n\n') +
+                '\n\nGive a comprehensive answer addressing all questions with a natural language interpretation of the results.';
+        } else {
+            promptForSummary = `User's question: "${question}"
+        SQL query performed: "${nonEmptyResults[0].query}"
+        Database results: ${JSON.stringify(nonEmptyResults[0].results)}
+
+        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
+        }
+
+        const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, promptForSummary, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
+        const chat_summary_final = chat_summary_prefix + chat_summary;
+        console.log(chat_summary_final);
+
+        // Step 5: Build response
+        if (isMultiple) {
+            const chartTarget = nonEmptyResults.find(sr =>
+                sr.is_chart_target &&
+                sr.results.length > 0 &&
+                !hasLongCellValue(sr.results) &&
+                !(sr.results.length === 1 && Object.keys(sr.results[0]).length === 1)
+            );
+
+            if (graph !== "none" && chartTarget && ["bar", "line", "pie"].includes(graph)) {
+                const field_headers = Object.keys(chartTarget.results[0]);
+                const dimension = field_headers[0];
+                const chartResponse = {
+                    data: chartTarget.results,
+                    raw: nonEmptyResults.map(sr => ({ question: sr.question, result_count: sr.results.length, results: sr.results })),
+                    markdown: generateMarkdownTable(chartTarget.results),
+                    field_headers,
+                    chart_type: graph,
+                    type: "chart",
+                    dimension,
+                    desc: chat_summary_final
+                };
+                if (graph === "pie") {
+                    chartResponse.metrics = field_headers.length > 1 ? field_headers[1] : null;
+                }
+                return res.json(chartResponse);
+            }
+
             return res.json({
+                raw: nonEmptyResults.map(sr => ({ question: sr.question, result_count: sr.results.length, results: sr.results })),
                 markdown: "...",
                 type: "markdown",
-                //query debugging agent response
-                desc: response_debug
+                desc: chat_summary_final
             });
         }
-        let chat_summary_new = "";
-        if (results.length > 100) {
-            console.log("Cut results for only 100 rows");
-            chat_summary_new = chat_summary_new + "\n**Nota:** Apenas os primeiros 100 registros foram analisados de um total de " + results.length + ".\n\n";
-            results = results.slice(0, 100);
-        }
-        // Step 3: Get AI interpretation of the results
-        prompt_results = `User's question: "${question}"
-        SQL query performed: "${query}"
-        Database results: ${JSON.stringify(results)}
-        
-        Give an answer to the user's question and provide a natural language summary and interpretation of these results.`;
-        const chat_summary = await getChatSummaryGeneral(AS_ACCOUNT, prompt_results, AGENT_KEY_COORD, AGENT_TOKEN_COORD);
 
-        //chat_summary_new = chat_summary.replace(/\$/g, " $ ");
-        chat_summary_new = chat_summary_new + chat_summary
-        console.log(chat_summary_new);
+        // Single sub-question: existing chart / markdown logic
+        const results = nonEmptyResults[0].results;
+        const finalQuery = nonEmptyResults[0].query;
+        const longCellDetected = hasLongCellValue(results);
+        const isSingleScalar = results.length === 1 && Object.keys(results[0]).length === 1;
 
-
-        //Check wether a graph is necessary
-        // Verifica si se necesita un gráfico
         if (graph === "bar") {
-            // 1. Get headers of the results
-            const field_headers = Object.keys(results[0]);
-
-            // 2. Get dimension
-            const dimension = field_headers[0];
-
-            // 3.Generate markdown table
-            const markdownTable = generateMarkdownTable(results);
-
-            // 4. Send response
-            return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "bar",
-                type: "chart",
-                dimension: dimension,
-                desc: chat_summary_new
-            });
-        }
-        else if (graph === "line") {
             const field_headers = Object.keys(results[0]);
             const dimension = field_headers[0];
-            const markdownTable = generateMarkdownTable(results);
+
+            if (longCellDetected || isSingleScalar) {
+                return res.json({ markdown: "...", type: "markdown", desc: chat_summary_final });
+            }
 
             return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "line",
-                type: "chart",
-                dimension: dimension,
-                desc: chat_summary_new
+                data: results, raw: results,
+                markdown: generateMarkdownTable(results),
+                field_headers, chart_type: "bar", type: "chart",
+                dimension, desc: chat_summary_final
             });
-        }
-        else if (graph === "pie") {
+        } else if (graph === "line") {
             const field_headers = Object.keys(results[0]);
-
-            // Para un Pie Chart, la dimensión son las categorías (primera columna)
             const dimension = field_headers[0];
 
-            // La métrica es el valor numérico (segunda columna) que define el tamaño de las rebanadas.
-            // Nos aseguramos de que haya al menos 2 columnas para evitar errores.
+            if (longCellDetected || isSingleScalar) {
+                return res.json({ markdown: "...", type: "markdown", desc: chat_summary_final });
+            }
+
+            return res.json({
+                data: results, raw: results,
+                markdown: generateMarkdownTable(results),
+                field_headers, chart_type: "line", type: "chart",
+                dimension, desc: chat_summary_final
+            });
+        } else if (graph === "pie") {
+            const field_headers = Object.keys(results[0]);
+            const dimension = field_headers[0];
             const metrics = field_headers.length > 1 ? field_headers[1] : null;
 
-            const markdownTable = generateMarkdownTable(results);
+            if (longCellDetected || isSingleScalar) {
+                return res.json({ markdown: "...", type: "markdown", desc: chat_summary_final });
+            }
 
-            // Se construye la respuesta incluyendo el nuevo campo "metrics"
             return res.json({
-                data: results,
-                raw: results,
-                markdown: markdownTable,
-                field_headers: field_headers,
-                chart_type: "pie",
-                type: "chart",
-                dimension: dimension,
-                metrics: metrics, // <-- CAMBIO CLAVE: Se añade el campo "metrics"
-                desc: chat_summary_new
+                data: results, raw: results,
+                markdown: generateMarkdownTable(results),
+                field_headers, chart_type: "pie", type: "chart",
+                dimension, metrics, desc: chat_summary_final
             });
         }
 
-        // Step 4: Return the response
-        const markdownTable = generateMarkdownTable(results);
+        if (longCellDetected) {
+            return res.json({
+                raw: { success: true, original_query: finalQuery, result_count: results.length, result: "The query was processed successfully" },
+                markdown: "...", type: "markdown", desc: chat_summary_final
+            });
+        }
+
         return res.json({
-            raw: {
-                success: true,
-                original_query: query,
-                result_count: results.length,
-                result: "The query was processed successfully"
-            },
-            markdown: markdownTable,
-            type: "markdown",
-            desc: chat_summary_new
+            raw: { success: true, original_query: finalQuery, result_count: results.length, result: "The query was processed successfully" },
+            markdown: "...", type: "markdown", desc: chat_summary_final
         });
 
     } catch (error) {
-        console.error('Error in /api/get_recommendation:', error);
+        console.error('Error in /api/get_recommendation_coordinator:', error);
 
-        // Provide helpful error messages based on the type of error
         if (error.message.includes('convert query to SQL')) {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: error,
-                    result: "The query was not processed successfully"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: "Por favor, tente outra pergunta"
+                raw: { success: false, original_query: originalQuery, error: error, result: "The query was not processed successfully" },
+                markdown: "...", type: "markdown", desc: "Por favor, tente outra pergunta"
             });
         } else if (error.message.includes('SQL syntax')) {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: error,
-                    result: "There was an issue with the generated query"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: "Houve um problema com a consulta gerada"
+                raw: { success: false, original_query: originalQuery, error: error, result: "There was an issue with the generated query" },
+                markdown: "...", type: "markdown", desc: "Houve um problema com a consulta gerada"
             });
         } else {
             return res.json({
-                raw: {
-                    success: false,
-                    original_query: query,
-                    error: error,
-                    result: "Something went wrong while processing your request"
-                },
-                markdown: "...",
-                type: "markdown",
-                desc: "Algo deu errado ao processar sua solicitação"
+                raw: { success: false, original_query: originalQuery, error: error, result: "Something went wrong while processing your request" },
+                markdown: "...", type: "markdown", desc: "Algo deu errado ao processar sua solicitação"
             });
         }
     }
