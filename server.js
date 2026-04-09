@@ -1463,6 +1463,57 @@ app.post('/api/auth/consultant/search', async (req, res) => {
     }
 });
 
+app.post('/api/auth/coordinator/search', async (req, res) => {
+    try {
+        const { name } = req.body;
+
+        if (!name || !name.trim()) {
+            return res.json({
+                success: false,
+                message: 'El nombre es requerido',
+                result: []
+            });
+        }
+
+        const sqlQuery = `
+  SELECT DISTINCT "Coordinator" 
+  FROM coordinators_passwords 
+  WHERE unaccent("Coordinator") ILIKE unaccent('%${name}%');
+`;
+        const result = await executeQueryAuth(sqlQuery);
+
+        if (result.length === 0) {
+            return res.json({
+                success: false,
+                message: 'No se encontró ningún coordinador con ese nombre',
+                result: []
+            });
+        }
+
+        if (result.length === 1) {
+            return res.json({
+                success: true,
+                message: 'Coordinador encontrado',
+                result: result
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: `Se encontraron ${result.length} coordinadores con nombres similares`,
+            result: result
+        });
+
+    } catch (error) {
+        console.log(`Error: ${error}`);
+        return res.json({
+            success: false,
+            message: 'Ocurrió un error, intenta de nuevo',
+            result: []
+        });
+    }
+});
+
 //initialize server with app.listen method, if there are no errors when initializing
 //the server then it will print succesfully in the console, if not then print error
 app.listen(PORT, (error) => {
